@@ -10,6 +10,7 @@ import { PlayersModule } from './players/players.module';
 import { GroupsModule } from './groups/groups.module';
 import { EvaluationsModule } from './evaluations/evaluations.module';
 import { EventsModule } from './events/events.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { EventsModule } from './events/events.module';
     GroupsModule,
     EvaluationsModule,
     EventsModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],
