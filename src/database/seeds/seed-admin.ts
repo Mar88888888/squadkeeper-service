@@ -7,7 +7,6 @@ import { join } from 'path';
 async function seedAdmin() {
   console.log('Starting admin seed...');
 
-  // Create a standalone DataSource using the same configuration as the app
   const dataSource = new DataSource({
     type: 'postgres',
     host: process.env.DB_HOST || 'localhost',
@@ -25,7 +24,6 @@ async function seedAdmin() {
 
     const userRepository = dataSource.getRepository(User);
 
-    // Check if admin already exists
     const existingAdmin = await userRepository.findOne({
       where: { email: 'admin@football.com' },
     });
@@ -36,10 +34,8 @@ async function seedAdmin() {
       return;
     }
 
-    // Hash password
     const hashedPassword = await bcrypt.hash('admin', 10);
 
-    // Create admin user
     const adminUser = userRepository.create({
       email: 'admin@football.com',
       passwordHash: hashedPassword,
@@ -62,5 +58,4 @@ async function seedAdmin() {
   }
 }
 
-// Run the seed
 seedAdmin();

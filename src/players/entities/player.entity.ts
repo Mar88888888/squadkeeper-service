@@ -30,7 +30,7 @@ export class Player extends PersonEntity {
   @JoinColumn()
   user: User;
 
-  @ManyToOne(() => Parent, (parent) => parent.children)
+  @ManyToOne(() => Parent, (parent) => parent.children, { nullable: true })
   @JoinColumn({ name: 'parentId' })
   parent: Parent;
 

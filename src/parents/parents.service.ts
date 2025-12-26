@@ -1,0 +1,110 @@
+import {
+  Injectable,
+  ConflictException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { DataSource, Repository, In } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+import { Parent } from './entities/parent.entity';
+import { User } from '../users/entities/user.entity';
+import { Player } from '../players/entities/player.entity';
+import { UserRole } from '../users/enums/user-role.enum';
+import { CreateParentDto } from './dto/create-parent.dto';
+
+@Injectable()
+export class ParentsService {
+  constructor(
+    @InjectRepository(Parent)
+    private parentsRepository: Repository<Parent>,
+    @InjectRepository(User)
+    private usersRepository: Repository<User>,
+    @InjectRepository(Player)
+    private playersRepository: Repository<Player>,
+    private dataSource: DataSource,
+  ) {}
+
+  async create(createParentDto: CreateParentDto): Promise<Parent> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Check if email already exists
+      const existingUser = await queryRunner.manager.findOne(User, {
+        where: { email: createParentDto.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email already exists');
+      }
+
+      // Hash password
+      const hashedPassword = await bcrypt.hash(createParentDto.password, 10);
+
+      // Create User
+      const user = queryRunner.manager.create(User, {
+        email: createParentDto.email,
+        passwordHash: hashedPassword,
+        role: UserRole.PARENT,
+        firstName: createParentDto.firstName,
+        lastName: createParentDto.lastName,
+      });
+
+      await queryRunner.manager.save(user);
+
+      // Create Parent Profile
+      const parent = queryRunner.manager.create(Parent, {
+        firstName: createParentDto.firstName,
+        lastName: createParentDto.lastName,
+        phoneNumber: createParentDto.phoneNumber,
+        user,
+      });
+
+      await queryRunner.manager.save(parent);
+
+      // Link User to Parent
+      user.parent = parent;
+      await queryRunner.manager.save(user);
+
+      // Linking Logic: If childrenIds is provided and not empty
+      if (
+        createParentDto.childrenIds &&
+        createParentDto.childrenIds.length > 0
+      ) {
+        // Verify all players exist
+        const players = await queryRunner.manager.find(Player, {
+          where: { id: In(createParentDto.childrenIds) },
+        });
+
+        if (players.length !== createParentDto.childrenIds.length) {
+          throw new NotFoundException('One or more players not found');
+        }
+
+        // Update players with parentId
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(Player)
+          .set({ parent })
+          .where('id IN (:...ids)', { ids: createParentDto.childrenIds })
+          .execute();
+      }
+
+      await queryRunner.commitTransaction();
+
+      return parent;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      if (
+        error instanceof ConflictException ||
+        error instanceof NotFoundException
+      ) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to create parent');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+}
