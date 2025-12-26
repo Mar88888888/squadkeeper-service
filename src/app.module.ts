@@ -11,6 +11,7 @@ import { GroupsModule } from './groups/groups.module';
 import { EvaluationsModule } from './evaluations/evaluations.module';
 import { EventsModule } from './events/events.module';
 import { AuthModule } from './auth/auth.module';
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { AuthModule } from './auth/auth.module';
     EvaluationsModule,
     EventsModule,
     AuthModule,
+    AttendanceModule,
   ],
   controllers: [AppController],
   providers: [AppService],

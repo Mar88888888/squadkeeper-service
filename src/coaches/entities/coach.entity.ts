@@ -1,4 +1,11 @@
-import { Entity, Column, OneToOne, OneToMany, JoinColumn } from 'typeorm';
+import {
+  Entity,
+  Column,
+  OneToOne,
+  OneToMany,
+  JoinColumn,
+  ManyToMany,
+} from 'typeorm';
 import { PersonEntity } from '../../common/entities/person.entity';
 import { User } from '../../users/entities/user.entity';
 import { Group } from '../../groups/entities/group.entity';
@@ -16,8 +23,11 @@ export class Coach extends PersonEntity {
   @JoinColumn()
   user: User;
 
-  @OneToMany(() => Group, (group) => group.coach)
-  groups: Group[];
+  @OneToMany(() => Group, (group) => group.headCoach)
+  headGroups: Group[];
+
+  @ManyToMany(() => Group, (group) => group.assistants)
+  assistantGroups: Group[];
 
   @OneToMany(() => Evaluation, (evaluation) => evaluation.coach)
   evaluations: Evaluation[];

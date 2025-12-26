@@ -11,6 +11,7 @@ import { User } from '../../users/entities/user.entity';
 import { Group } from '../../groups/entities/group.entity';
 import { Evaluation } from '../../evaluations/entities/evaluation.entity';
 import { Parent } from '../../parents/entities/parent.entity';
+import { Attendance } from '../../attendance/entities/attendance.entity';
 
 @Entity('players')
 export class Player extends PersonEntity {
@@ -39,4 +40,7 @@ export class Player extends PersonEntity {
 
   @OneToMany(() => Evaluation, (evaluation) => evaluation.player)
   evaluations: Evaluation[];
+
+  @OneToMany(() => Attendance, (attendance) => attendance.player)
+  attendances: Attendance[];
 }

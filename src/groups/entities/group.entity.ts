@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  OneToMany,
+  ManyToMany,
+  JoinTable,
+} from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Coach } from '../../coaches/entities/coach.entity';
 import { Player } from '../../players/entities/player.entity';
@@ -13,8 +20,12 @@ export class Group extends BaseEntity {
   @Column({ type: 'int' })
   yearOfBirth: number;
 
-  @ManyToOne(() => Coach, (coach) => coach.groups)
-  coach: Coach;
+  @ManyToOne(() => Coach, (coach) => coach.headGroups, { nullable: true })
+  headCoach: Coach | null;
+
+  @ManyToMany(() => Coach, (coach) => coach.assistantGroups)
+  @JoinTable({ name: 'group_assistants' })
+  assistants: Coach[];
 
   @OneToMany(() => Player, (player) => player.group)
   players: Player[];

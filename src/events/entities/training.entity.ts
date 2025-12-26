@@ -1,6 +1,7 @@
-import { Entity, Column, ManyToOne } from 'typeorm';
+import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Group } from '../../groups/entities/group.entity';
+import { Attendance } from '../../attendance/entities/attendance.entity';
 
 @Entity('trainings')
 export class Training extends BaseEntity {
@@ -13,9 +14,13 @@ export class Training extends BaseEntity {
   @Column()
   location: string;
 
-  @Column()
-  topic: string;
+  @Column({ nullable: true })
+  topic?: string;
 
   @ManyToOne(() => Group, (group) => group.trainings)
+  @JoinColumn({ name: 'groupId' })
   group: Group;
+
+  @OneToMany(() => Attendance, (attendance) => attendance.training)
+  attendances: Attendance[];
 }
