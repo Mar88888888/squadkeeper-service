@@ -25,6 +25,67 @@ export class ParentsService {
     private dataSource: DataSource,
   ) {}
 
+  async findAll(): Promise<Parent[]> {
+    return this.parentsRepository.find({
+      relations: ['user', 'children'],
+      order: { lastName: 'ASC', firstName: 'ASC' },
+    });
+  }
+
+  async remove(id: string): Promise<void> {
+    const parent = await this.parentsRepository.findOne({
+      where: { id },
+      relations: ['user', 'children'],
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent not found');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Unlink children first
+      if (parent.children && parent.children.length > 0) {
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(Player)
+          .set({ parent: null })
+          .where('parentId = :parentId', { parentId: id })
+          .execute();
+      }
+
+      const userId = parent.user?.id;
+
+      // Break the bidirectional reference from User to Parent
+      if (userId) {
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(User)
+          .set({ parent: null as unknown as Parent })
+          .where('id = :userId', { userId })
+          .execute();
+      }
+
+      // Now we can safely remove the parent
+      await queryRunner.manager.remove(parent);
+
+      // Finally delete the user
+      if (userId) {
+        await queryRunner.manager.delete(User, userId);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch {
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException('Failed to delete parent');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
   async create(createParentDto: CreateParentDto): Promise<Parent> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();

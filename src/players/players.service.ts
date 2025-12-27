@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   BadRequestException,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -20,6 +21,57 @@ export class PlayersService {
     private usersRepository: Repository<User>,
     private dataSource: DataSource,
   ) {}
+
+  async findAll(): Promise<Player[]> {
+    return this.playersRepository.find({
+      relations: ['user', 'group', 'parent'],
+      order: { lastName: 'ASC', firstName: 'ASC' },
+    });
+  }
+
+  async remove(id: string): Promise<void> {
+    const player = await this.playersRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!player) {
+      throw new NotFoundException('Player not found');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const userId = player.user?.id;
+
+      // First, break the bidirectional reference from User to Player
+      if (userId) {
+        await queryRunner.manager
+          .createQueryBuilder()
+          .update(User)
+          .set({ player: null as unknown as Player })
+          .where('id = :userId', { userId })
+          .execute();
+      }
+
+      // Now we can safely remove the player
+      await queryRunner.manager.remove(player);
+
+      // Finally delete the user
+      if (userId) {
+        await queryRunner.manager.delete(User, userId);
+      }
+
+      await queryRunner.commitTransaction();
+    } catch {
+      await queryRunner.rollbackTransaction();
+      throw new BadRequestException('Failed to delete player');
+    } finally {
+      await queryRunner.release();
+    }
+  }
 
   async create(createPlayerDto: CreatePlayerDto): Promise<Player> {
     const queryRunner = this.dataSource.createQueryRunner();

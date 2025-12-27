@@ -4,6 +4,7 @@ import {
   MinLength,
   IsInt,
   IsOptional,
+  IsDateString,
 } from 'class-validator';
 
 export class CreateCoachDto {
@@ -23,6 +24,9 @@ export class CreateCoachDto {
   @IsOptional()
   @IsString()
   phoneNumber?: string;
+
+  @IsDateString()
+  dateOfBirth: string;
 
   @IsString()
   licenseLevel: string;

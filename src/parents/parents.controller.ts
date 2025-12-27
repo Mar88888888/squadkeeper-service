@@ -1,7 +1,11 @@
 import {
   Controller,
+  Get,
   Post,
+  Delete,
   Body,
+  Param,
+  ParseUUIDPipe,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -14,14 +18,25 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 
 @Controller('parents')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.ADMIN)
 export class ParentsController {
   constructor(private readonly parentsService: ParentsService) {}
 
+  @Get()
+  findAll() {
+    return this.parentsService.findAll();
+  }
+
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
   create(@Body() createParentDto: CreateParentDto) {
     return this.parentsService.create(createParentDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  remove(@Param('id', ParseUUIDPipe) id: string) {
+    return this.parentsService.remove(id);
   }
 }

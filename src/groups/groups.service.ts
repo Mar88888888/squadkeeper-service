@@ -5,6 +5,7 @@ import { Group } from './entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
+import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupStaffDto } from './dto/update-group-staff.dto';
 
 @Injectable()
@@ -72,6 +73,20 @@ export class GroupsService {
     }
 
     return group;
+  }
+
+  async update(id: string, updateGroupDto: UpdateGroupDto): Promise<Group> {
+    const group = await this.findOne(id);
+
+    if (updateGroupDto.name !== undefined) {
+      group.name = updateGroupDto.name;
+    }
+
+    if (updateGroupDto.yearOfBirth !== undefined) {
+      group.yearOfBirth = updateGroupDto.yearOfBirth;
+    }
+
+    return await this.groupsRepository.save(group);
   }
 
   async updateStaff(
@@ -165,7 +180,31 @@ export class GroupsService {
     return updatedGroup;
   }
 
+  async removePlayers(groupId: string, playerIds: string[]): Promise<Group> {
+    const group = await this.findOne(groupId);
+
+    // Update players to remove them from the group
+    await this.playersRepository
+      .createQueryBuilder()
+      .update(Player)
+      .set({ group: null as unknown as Group })
+      .where('id IN (:...playerIds)', { playerIds })
+      .andWhere('groupId = :groupId', { groupId })
+      .execute();
+
+    // Return the updated group with relations
+    return await this.findOne(groupId);
+  }
+
   async remove(id: string): Promise<void> {
+    // First unassign all players from this group
+    await this.playersRepository
+      .createQueryBuilder()
+      .update(Player)
+      .set({ group: null as unknown as Group })
+      .where('groupId = :groupId', { groupId: id })
+      .execute();
+
     const result = await this.groupsRepository.delete(id);
     if (result.affected === 0) {
       throw new NotFoundException(`Group with ID ${id} not found`);
