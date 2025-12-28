@@ -4,9 +4,11 @@ import { Repository, In } from 'typeorm';
 import { Group } from './entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
+import { Parent } from '../parents/entities/parent.entity';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupStaffDto } from './dto/update-group-staff.dto';
+import { UserRole } from '../users/enums/user-role.enum';
 
 @Injectable()
 export class GroupsService {
@@ -17,6 +19,8 @@ export class GroupsService {
     private coachesRepository: Repository<Coach>,
     @InjectRepository(Player)
     private playersRepository: Repository<Player>,
+    @InjectRepository(Parent)
+    private parentsRepository: Repository<Parent>,
   ) {}
 
   async create(createGroupDto: CreateGroupDto): Promise<Group> {
@@ -60,6 +64,79 @@ export class GroupsService {
     return await this.groupsRepository.find({
       relations: ['headCoach', 'assistants', 'players'],
     });
+  }
+
+  async findByCoachUserId(userId: string): Promise<Group[]> {
+    const coach = await this.coachesRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['headGroups', 'assistantGroups'],
+    });
+
+    if (!coach) {
+      return [];
+    }
+
+    const groupIds = [
+      ...coach.headGroups.map((g) => g.id),
+      ...coach.assistantGroups.map((g) => g.id),
+    ];
+
+    if (groupIds.length === 0) {
+      return [];
+    }
+
+    return await this.groupsRepository.find({
+      where: { id: In(groupIds) },
+      relations: ['headCoach', 'assistants', 'players'],
+    });
+  }
+
+  async findMyGroups(userId: string, role: UserRole): Promise<Group[]> {
+    if (role === UserRole.ADMIN) {
+      return this.findAll();
+    }
+
+    if (role === UserRole.COACH) {
+      return this.findByCoachUserId(userId);
+    }
+
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['group'],
+      });
+      if (!player?.group) {
+        return [];
+      }
+      return await this.groupsRepository.find({
+        where: { id: player.group.id },
+        relations: ['headCoach', 'assistants', 'players'],
+      });
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children', 'children.group'],
+      });
+      if (!parent?.children) {
+        return [];
+      }
+      const groupIds = parent.children
+        .filter((child) => child.group)
+        .map((child) => child.group.id);
+
+      if (groupIds.length === 0) {
+        return [];
+      }
+
+      return await this.groupsRepository.find({
+        where: { id: In(groupIds) },
+        relations: ['headCoach', 'assistants', 'players'],
+      });
+    }
+
+    return [];
   }
 
   async findOne(id: string): Promise<Group> {

@@ -7,7 +7,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Query,
+  Request,
 } from '@nestjs/common';
 import { TrainingsService } from './trainings.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
@@ -17,28 +17,38 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 
 @Controller('trainings')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class TrainingsController {
   constructor(private readonly trainingsService: TrainingsService) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   create(@Body() createTrainingDto: CreateTrainingDto) {
     return this.trainingsService.create(createTrainingDto);
   }
 
   @Get()
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.COACH, UserRole.ADMIN, UserRole.PARENT)
+  @Roles(UserRole.ADMIN)
   findAll() {
     return this.trainingsService.findAll();
   }
 
+  @Get('my')
+  @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  findMyTrainings(@Request() req: { user: { id: string; role: UserRole } }) {
+    return this.trainingsService.findMyTrainings(req.user.id, req.user.role);
+  }
+
   @Get('group/:groupId')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.COACH, UserRole.ADMIN, UserRole.PARENT)
+  @Roles(UserRole.COACH, UserRole.ADMIN)
   findByGroup(@Param('groupId') groupId: string) {
     return this.trainingsService.findByGroup(groupId);
+  }
+
+  @Get(':id')
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  findOne(@Param('id') id: string) {
+    return this.trainingsService.findOne(id);
   }
 }

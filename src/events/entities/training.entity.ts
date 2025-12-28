@@ -2,6 +2,7 @@ import { Entity, Column, ManyToOne, OneToMany, JoinColumn } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { Group } from '../../groups/entities/group.entity';
 import { Attendance } from '../../attendance/entities/attendance.entity';
+import { Evaluation } from '../../evaluations/entities/evaluation.entity';
 
 @Entity('trainings')
 export class Training extends BaseEntity {
@@ -23,4 +24,7 @@ export class Training extends BaseEntity {
 
   @OneToMany(() => Attendance, (attendance) => attendance.training)
   attendances: Attendance[];
+
+  @OneToMany(() => Evaluation, (evaluation) => evaluation.training)
+  evaluations: Evaluation[];
 }
