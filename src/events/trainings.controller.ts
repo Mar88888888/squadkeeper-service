@@ -47,8 +47,11 @@ export class TrainingsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.COACH, UserRole.ADMIN)
-  findOne(@Param('id') id: string) {
-    return this.trainingsService.findOne(id);
+  @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  findOne(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string; role: UserRole } },
+  ) {
+    return this.trainingsService.findOneForUser(id, req.user.id, req.user.role);
   }
 }

@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -88,6 +89,67 @@ export class TrainingsService {
     }
 
     return training as Training & { group: Group & { players: Player[] } };
+  }
+
+  async findOneForUser(
+    id: string,
+    userId: string,
+    role: UserRole,
+  ): Promise<Training & { group: Group & { players: Player[] } }> {
+    const training = await this.findOne(id);
+
+    // Admins and coaches can see all players
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      // For coaches, verify they're assigned to this group
+      if (role === UserRole.COACH) {
+        const coach = await this.coachesRepository.findOne({
+          where: { user: { id: userId } },
+          relations: ['headGroups', 'assistantGroups'],
+        });
+        const coachGroupIds = [
+          ...(coach?.headGroups?.map((g) => g.id) || []),
+          ...(coach?.assistantGroups?.map((g) => g.id) || []),
+        ];
+        if (!coachGroupIds.includes(training.group.id)) {
+          throw new ForbiddenException('You do not have access to this training');
+        }
+      }
+      return training;
+    }
+
+    // For players, verify they're in the group and filter to only their data
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['group'],
+      });
+      if (!player || player.group?.id !== training.group.id) {
+        throw new ForbiddenException('You do not have access to this training');
+      }
+      // Return training with only this player in the players list
+      training.group.players = training.group.players.filter((p) => p.id === player.id);
+      return training;
+    }
+
+    // For parents, verify their children are in the group
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children', 'children.group'],
+      });
+      const childrenInGroup = parent?.children?.filter(
+        (child) => child.group?.id === training.group.id,
+      ) || [];
+      if (childrenInGroup.length === 0) {
+        throw new ForbiddenException('You do not have access to this training');
+      }
+      const childIds = childrenInGroup.map((c) => c.id);
+      // Return training with only children in the players list
+      training.group.players = training.group.players.filter((p) => childIds.includes(p.id));
+      return training;
+    }
+
+    throw new ForbiddenException('You do not have access to this training');
   }
 
   async findMyTrainings(

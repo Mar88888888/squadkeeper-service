@@ -9,11 +9,13 @@ import { Attendance } from './entities/attendance.entity';
 import { Player } from '../players/entities/player.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
+import { Evaluation } from '../evaluations/entities/evaluation.entity';
 import {
   MarkAttendanceBatchDto,
   EventType,
 } from './dto/mark-attendance-batch.dto';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
+import { AttendanceStatus } from './enums/attendance-status.enum';
 
 @Injectable()
 export class AttendanceService {
@@ -111,7 +113,21 @@ export class AttendanceService {
       // Update existing attendance
       existingAttendance.status = record.status;
       existingAttendance.notes = record.notes || null;
-      return await queryRunner.manager.save(existingAttendance);
+      const savedAttendance = await queryRunner.manager.save(existingAttendance);
+
+      // If status changed to not present (not PRESENT or LATE), delete evaluations for this training
+      if (
+        eventType === EventType.TRAINING &&
+        record.status !== AttendanceStatus.PRESENT &&
+        record.status !== AttendanceStatus.LATE
+      ) {
+        await queryRunner.manager.delete(Evaluation, {
+          player: { id: record.playerId },
+          training: { id: eventId },
+        });
+      }
+
+      return savedAttendance;
     } else {
       // Create new attendance
       const attendanceData: Partial<Attendance> = {
@@ -151,5 +167,65 @@ export class AttendanceService {
       relations: ['player', 'training', 'match'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async findByEventForPlayers(
+    eventId: string,
+    eventType: EventType,
+    playerIds: string[],
+  ): Promise<Attendance[]> {
+    const allAttendance = await this.findByEvent(eventId, eventType);
+    return allAttendance.filter((a) => playerIds.includes(a.player.id));
+  }
+
+  async getPlayerStats(playerIds: string[]): Promise<{
+    total: number;
+    present: number;
+    absent: number;
+    late: number;
+    sick: number;
+    excused: number;
+    rate: number;
+  }> {
+    const attendances = await this.attendanceRepository.find({
+      where: playerIds.map((id) => ({ player: { id } })),
+    });
+
+    const stats = {
+      total: attendances.length,
+      present: 0,
+      absent: 0,
+      late: 0,
+      sick: 0,
+      excused: 0,
+      rate: 0,
+    };
+
+    attendances.forEach((a) => {
+      switch (a.status) {
+        case AttendanceStatus.PRESENT:
+          stats.present++;
+          break;
+        case AttendanceStatus.ABSENT:
+          stats.absent++;
+          break;
+        case AttendanceStatus.LATE:
+          stats.late++;
+          break;
+        case AttendanceStatus.SICK:
+          stats.sick++;
+          break;
+        case AttendanceStatus.EXCUSED:
+          stats.excused++;
+          break;
+      }
+    });
+
+    // Calculate rate: (present + late) / total * 100
+    if (stats.total > 0) {
+      stats.rate = Math.round(((stats.present + stats.late) / stats.total) * 100);
+    }
+
+    return stats;
   }
 }
