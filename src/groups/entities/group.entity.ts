@@ -11,6 +11,7 @@ import { Coach } from '../../coaches/entities/coach.entity';
 import { Player } from '../../players/entities/player.entity';
 import { Training } from '../../events/entities/training.entity';
 import { Match } from '../../events/entities/match.entity';
+import { TrainingSchedule } from '../../events/entities/training-schedule.entity';
 
 @Entity('groups')
 export class Group extends BaseEntity {
@@ -35,4 +36,7 @@ export class Group extends BaseEntity {
 
   @OneToMany(() => Match, (match) => match.group)
   matches: Match[];
+
+  @OneToMany(() => TrainingSchedule, (schedule) => schedule.group)
+  trainingSchedules: TrainingSchedule[];
 }

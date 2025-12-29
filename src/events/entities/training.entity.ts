@@ -3,6 +3,7 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Group } from '../../groups/entities/group.entity';
 import { Attendance } from '../../attendance/entities/attendance.entity';
 import { Evaluation } from '../../evaluations/entities/evaluation.entity';
+import { TrainingSchedule } from './training-schedule.entity';
 
 @Entity('trainings')
 export class Training extends BaseEntity {
@@ -21,6 +22,10 @@ export class Training extends BaseEntity {
   @ManyToOne(() => Group, (group) => group.trainings)
   @JoinColumn({ name: 'groupId' })
   group: Group;
+
+  @ManyToOne(() => TrainingSchedule, { nullable: true, onDelete: 'SET NULL' })
+  @JoinColumn({ name: 'scheduleId' })
+  schedule: TrainingSchedule | null;
 
   @OneToMany(() => Attendance, (attendance) => attendance.training)
   attendances: Attendance[];
