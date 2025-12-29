@@ -86,6 +86,64 @@ export class ParentsService {
     }
   }
 
+  async linkChild(parentId: string, playerId: string): Promise<Parent> {
+    const parent = await this.parentsRepository.findOne({
+      where: { id: parentId },
+      relations: ['children'],
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent not found');
+    }
+
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId },
+      relations: ['parent'],
+    });
+
+    if (!player) {
+      throw new NotFoundException('Player not found');
+    }
+
+    if (player.parent?.id === parentId) {
+      throw new BadRequestException('Player is already linked to this parent');
+    }
+
+    player.parent = parent;
+    await this.playersRepository.save(player);
+
+    return this.parentsRepository.findOne({
+      where: { id: parentId },
+      relations: ['user', 'children'],
+    }) as Promise<Parent>;
+  }
+
+  async unlinkChild(parentId: string, playerId: string): Promise<Parent> {
+    const parent = await this.parentsRepository.findOne({
+      where: { id: parentId },
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent not found');
+    }
+
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId, parent: { id: parentId } },
+    });
+
+    if (!player) {
+      throw new NotFoundException('Player not found or not linked to this parent');
+    }
+
+    player.parent = null as unknown as Parent;
+    await this.playersRepository.save(player);
+
+    return this.parentsRepository.findOne({
+      where: { id: parentId },
+      relations: ['user', 'children'],
+    }) as Promise<Parent>;
+  }
+
   async create(createParentDto: CreateParentDto): Promise<Parent> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();

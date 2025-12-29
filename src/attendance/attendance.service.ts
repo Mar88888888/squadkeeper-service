@@ -228,4 +228,80 @@ export class AttendanceService {
 
     return stats;
   }
+
+  async getStatsPerPlayer(
+    players: { id: string; firstName: string; lastName: string }[],
+  ): Promise<
+    Array<{
+      playerId: string;
+      playerName: string;
+      total: number;
+      present: number;
+      absent: number;
+      late: number;
+      sick: number;
+      excused: number;
+      rate: number;
+    }>
+  > {
+    const result: Array<{
+      playerId: string;
+      playerName: string;
+      total: number;
+      present: number;
+      absent: number;
+      late: number;
+      sick: number;
+      excused: number;
+      rate: number;
+    }> = [];
+
+    for (const player of players) {
+      const attendances = await this.attendanceRepository.find({
+        where: { player: { id: player.id } },
+      });
+
+      const stats = {
+        playerId: player.id,
+        playerName: `${player.firstName} ${player.lastName}`,
+        total: attendances.length,
+        present: 0,
+        absent: 0,
+        late: 0,
+        sick: 0,
+        excused: 0,
+        rate: 0,
+      };
+
+      attendances.forEach((a) => {
+        switch (a.status) {
+          case AttendanceStatus.PRESENT:
+            stats.present++;
+            break;
+          case AttendanceStatus.ABSENT:
+            stats.absent++;
+            break;
+          case AttendanceStatus.LATE:
+            stats.late++;
+            break;
+          case AttendanceStatus.SICK:
+            stats.sick++;
+            break;
+          case AttendanceStatus.EXCUSED:
+            stats.excused++;
+            break;
+        }
+      });
+
+      if (stats.total > 0) {
+        stats.rate = Math.round(
+          ((stats.present + stats.late) / stats.total) * 100,
+        );
+      }
+
+      result.push(stats);
+    }
+
+    return result;
+  }
 }

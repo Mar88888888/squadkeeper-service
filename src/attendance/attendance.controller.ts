@@ -130,8 +130,8 @@ export class AttendanceController {
       if (!parent || !parent.children?.length) {
         throw new ForbiddenException('No children found');
       }
-      const childIds = parent.children.map((c) => c.id);
-      return this.attendanceService.getPlayerStats(childIds);
+      // Return per-child stats for parents
+      return this.attendanceService.getStatsPerPlayer(parent.children);
     }
 
     throw new ForbiddenException('Access denied');

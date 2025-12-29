@@ -39,4 +39,22 @@ export class ParentsController {
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.parentsService.remove(id);
   }
+
+  @Post(':id/children/:playerId')
+  @HttpCode(HttpStatus.OK)
+  linkChild(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('playerId', ParseUUIDPipe) playerId: string,
+  ) {
+    return this.parentsService.linkChild(id, playerId);
+  }
+
+  @Delete(':id/children/:playerId')
+  @HttpCode(HttpStatus.OK)
+  unlinkChild(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('playerId', ParseUUIDPipe) playerId: string,
+  ) {
+    return this.parentsService.unlinkChild(id, playerId);
+  }
 }
