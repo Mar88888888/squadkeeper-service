@@ -24,6 +24,7 @@ import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto, MatchTimeFilter } from './dto/filter-matches.dto';
 import { AddGoalDto } from './dto/add-goal.dto';
 import { UserRole } from '../users/enums/user-role.enum';
+import { MatchType } from './enums/match-type.enum';
 
 @Injectable()
 export class MatchesService {
@@ -130,6 +131,7 @@ export class MatchesService {
 
     const match = this.matchesRepository.create({
       ...createMatchDto,
+      matchType: createMatchDto.matchType || MatchType.FRIENDLY,
       group,
       homeGoals: null,
       awayGoals: null,
@@ -144,10 +146,38 @@ export class MatchesService {
   ): Promise<Match> {
     const match = await this.matchesRepository.findOne({
       where: { id },
+      relations: ['goals'],
     });
 
     if (!match) {
       throw new NotFoundException(`Match with id ${id} not found`);
+    }
+
+    // If goals are already recorded, validate new score doesn't go below recorded goals
+    if (match.goals && match.goals.length > 0) {
+      const existingRegularGoals = match.goals.filter((g) => !g.isOwnGoal).length;
+      const existingOwnGoals = match.goals.filter((g) => g.isOwnGoal).length;
+
+      // Our goals = where regular goals are recorded
+      const newOurGoals = match.isHome
+        ? updateMatchResultDto.homeGoals
+        : updateMatchResultDto.awayGoals;
+      // Conceded goals = where own goals count
+      const newConcededGoals = match.isHome
+        ? updateMatchResultDto.awayGoals
+        : updateMatchResultDto.homeGoals;
+
+      if (newOurGoals < existingRegularGoals) {
+        throw new BadRequestException(
+          `Cannot set team score to ${newOurGoals}. There are ${existingRegularGoals} goals already recorded`,
+        );
+      }
+
+      if (newConcededGoals < existingOwnGoals) {
+        throw new BadRequestException(
+          `Cannot set conceded goals to ${newConcededGoals}. There are ${existingOwnGoals} own goals already recorded`,
+        );
+      }
     }
 
     match.homeGoals = updateMatchResultDto.homeGoals;
@@ -273,11 +303,46 @@ export class MatchesService {
   async addGoal(matchId: string, addGoalDto: AddGoalDto): Promise<Goal> {
     const match = await this.matchesRepository.findOne({
       where: { id: matchId },
-      relations: ['group', 'group.players'],
+      relations: ['group', 'group.players', 'goals'],
     });
 
     if (!match) {
       throw new NotFoundException(`Match with id ${matchId} not found`);
+    }
+
+    // Validate that match score is set before adding goals
+    if (match.homeGoals === null || match.awayGoals === null) {
+      throw new BadRequestException(
+        'Cannot add goals before match result is set',
+      );
+    }
+
+    // Calculate our goals and conceded goals based on home/away
+    const ourGoals = match.isHome ? match.homeGoals : match.awayGoals;
+    const concededGoals = match.isHome ? match.awayGoals : match.homeGoals;
+
+    // Count existing goals
+    const existingGoals = match.goals || [];
+    const existingRegularGoals = existingGoals.filter((g) => !g.isOwnGoal).length;
+    const existingOwnGoals = existingGoals.filter((g) => g.isOwnGoal).length;
+
+    // Validate goal limits
+    const isOwnGoal = addGoalDto.isOwnGoal || false;
+
+    if (isOwnGoal) {
+      // Own goals count towards opponent's score (our conceded goals)
+      if (existingOwnGoals >= concededGoals) {
+        throw new BadRequestException(
+          `Cannot add more own goals. Own goals (${existingOwnGoals}) already match conceded goals (${concededGoals})`,
+        );
+      }
+    } else {
+      // Regular goals count towards our score
+      if (existingRegularGoals >= ourGoals) {
+        throw new BadRequestException(
+          `Cannot add more goals. Recorded goals (${existingRegularGoals}) already match team score (${ourGoals})`,
+        );
+      }
     }
 
     const scorer = await this.playersRepository.findOne({
@@ -303,7 +368,7 @@ export class MatchesService {
       scorer,
       assist,
       minute: addGoalDto.minute || null,
-      isOwnGoal: addGoalDto.isOwnGoal || false,
+      isOwnGoal,
     });
 
     return await this.goalsRepository.save(goal);

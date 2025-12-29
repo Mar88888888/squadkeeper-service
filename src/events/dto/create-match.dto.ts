@@ -1,4 +1,10 @@
-import { IsDate, IsString, IsBoolean, IsEnum } from 'class-validator';
+import {
+  IsDate,
+  IsString,
+  IsBoolean,
+  IsEnum,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { MatchType } from '../enums/match-type.enum';
 
@@ -23,6 +29,7 @@ export class CreateMatchDto {
   @IsBoolean()
   isHome: boolean;
 
+  @IsOptional()
   @IsEnum(MatchType)
-  matchType: MatchType;
+  matchType?: MatchType;
 }

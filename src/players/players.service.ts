@@ -5,12 +5,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In, MoreThanOrEqual, Between } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Player } from './entities/player.entity';
 import { User } from '../users/entities/user.entity';
+import { Goal } from '../events/entities/goal.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
+import { Coach } from '../coaches/entities/coach.entity';
+import { Group } from '../groups/entities/group.entity';
+import { Parent } from '../parents/entities/parent.entity';
 import { UserRole } from '../users/enums/user-role.enum';
+import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
+import {
+  StatsPeriod,
+  PlayerStatsResponse,
+  TeamStatsResponse,
+  ChildrenStatsResponse,
+} from './dto/player-stats.dto';
 
 @Injectable()
 export class PlayersService {
@@ -19,8 +31,228 @@ export class PlayersService {
     private playersRepository: Repository<Player>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
+    @InjectRepository(Goal)
+    private goalsRepository: Repository<Goal>,
+    @InjectRepository(Attendance)
+    private attendanceRepository: Repository<Attendance>,
+    @InjectRepository(Coach)
+    private coachesRepository: Repository<Coach>,
+    @InjectRepository(Group)
+    private groupsRepository: Repository<Group>,
+    @InjectRepository(Parent)
+    private parentsRepository: Repository<Parent>,
     private dataSource: DataSource,
   ) {}
+
+  private getDateRangeForPeriod(period: StatsPeriod): { start?: Date; end?: Date } {
+    const now = new Date();
+
+    switch (period) {
+      case StatsPeriod.THIS_MONTH: {
+        const start = new Date(now.getFullYear(), now.getMonth(), 1);
+        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case StatsPeriod.THIS_YEAR: {
+        const start = new Date(now.getFullYear(), 0, 1);
+        const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
+        return { start, end };
+      }
+      case StatsPeriod.ALL_TIME:
+      default:
+        return {};
+    }
+  }
+
+  async getPlayerStats(
+    playerId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ): Promise<PlayerStatsResponse> {
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      throw new NotFoundException(`Player with id ${playerId} not found`);
+    }
+
+    const dateRange = this.getDateRangeForPeriod(period);
+
+    // Count matches played (attendance with PRESENT or LATE status for matches)
+    const matchesQuery = this.attendanceRepository
+      .createQueryBuilder('a')
+      .innerJoin('a.match', 'm')
+      .where('a.player.id = :playerId', { playerId })
+      .andWhere('a.match IS NOT NULL')
+      .andWhere('a.status IN (:...statuses)', {
+        statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
+      });
+
+    if (dateRange.start && dateRange.end) {
+      matchesQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const matchesPlayed = await matchesQuery.getCount();
+
+    // Count goals (excluding own goals)
+    const goalsQuery = this.goalsRepository
+      .createQueryBuilder('g')
+      .innerJoin('g.match', 'm')
+      .where('g.scorer.id = :playerId', { playerId })
+      .andWhere('g.isOwnGoal = false');
+
+    if (dateRange.start && dateRange.end) {
+      goalsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const goals = await goalsQuery.getCount();
+
+    // Count assists
+    const assistsQuery = this.goalsRepository
+      .createQueryBuilder('g')
+      .innerJoin('g.match', 'm')
+      .where('g.assist.id = :playerId', { playerId });
+
+    if (dateRange.start && dateRange.end) {
+      assistsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const assists = await assistsQuery.getCount();
+
+    return {
+      playerId: player.id,
+      playerName: `${player.firstName} ${player.lastName}`,
+      matchesPlayed,
+      goals,
+      assists,
+      period,
+    };
+  }
+
+  async getMyStats(
+    userId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ): Promise<PlayerStatsResponse> {
+    const player = await this.playersRepository
+      .createQueryBuilder('player')
+      .innerJoin('player.user', 'user')
+      .where('user.id = :userId', { userId })
+      .getOne();
+
+    if (!player) {
+      throw new NotFoundException('Player profile not found');
+    }
+
+    return this.getPlayerStats(player.id, period);
+  }
+
+  async getTeamStats(
+    userId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ): Promise<TeamStatsResponse[]> {
+    // Find coach and their groups
+    const coach = await this.coachesRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['headGroups', 'assistantGroups'],
+    });
+
+    if (!coach) {
+      throw new NotFoundException('Coach profile not found');
+    }
+
+    const groupIds = [
+      ...coach.headGroups.map((g) => g.id),
+      ...coach.assistantGroups.map((g) => g.id),
+    ];
+
+    if (groupIds.length === 0) {
+      return [];
+    }
+
+    // Get all groups with players
+    const groups = await this.groupsRepository.find({
+      where: { id: In(groupIds) },
+      relations: ['players'],
+      order: { name: 'ASC' },
+    });
+
+    const result: TeamStatsResponse[] = [];
+
+    for (const group of groups) {
+      const playerStats: PlayerStatsResponse[] = [];
+
+      for (const player of group.players) {
+        const stats = await this.getPlayerStats(player.id, period);
+        playerStats.push(stats);
+      }
+
+      // Sort by goals, then assists
+      playerStats.sort((a, b) => {
+        if (b.goals !== a.goals) return b.goals - a.goals;
+        return b.assists - a.assists;
+      });
+
+      result.push({
+        groupId: group.id,
+        groupName: group.name,
+        players: playerStats,
+        period,
+      });
+    }
+
+    return result;
+  }
+
+  async getChildrenStats(
+    userId: string,
+    childId?: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ): Promise<ChildrenStatsResponse> {
+    // Find parent by user ID
+    const parent = await this.parentsRepository
+      .createQueryBuilder('parent')
+      .innerJoin('parent.user', 'user')
+      .leftJoinAndSelect('parent.children', 'children')
+      .where('user.id = :userId', { userId })
+      .getOne();
+
+    if (!parent) {
+      throw new NotFoundException('Parent profile not found');
+    }
+
+    const children = parent.children.map((child) => ({
+      id: child.id,
+      firstName: child.firstName,
+      lastName: child.lastName,
+    }));
+
+    // If no children, return empty
+    if (children.length === 0) {
+      return { children: [], stats: null };
+    }
+
+    // If childId specified, use it; otherwise use first child
+    const selectedChildId = childId || children[0].id;
+
+    // Verify the child belongs to this parent
+    const isValidChild = children.some((c) => c.id === selectedChildId);
+    if (!isValidChild) {
+      throw new BadRequestException('Child does not belong to this parent');
+    }
+
+    const stats = await this.getPlayerStats(selectedChildId, period);
+
+    return { children, stats };
+  }
 
   async findAll(): Promise<Player[]> {
     return this.playersRepository.find({
