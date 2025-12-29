@@ -31,8 +31,13 @@ export class EvaluationRecordDto {
 }
 
 export class CreateEvaluationBatchDto {
+  @IsOptional()
   @IsUUID()
-  trainingId: string;
+  trainingId?: string;
+
+  @IsOptional()
+  @IsUUID()
+  matchId?: string;
 
   @IsArray()
   @ArrayMinSize(1)

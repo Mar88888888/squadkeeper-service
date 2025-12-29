@@ -186,9 +186,12 @@ export class AttendanceService {
     sick: number;
     excused: number;
     rate: number;
+    totalTrainings: number;
+    totalMatches: number;
   }> {
     const attendances = await this.attendanceRepository.find({
       where: playerIds.map((id) => ({ player: { id } })),
+      relations: ['training', 'match'],
     });
 
     const stats = {
@@ -199,9 +202,18 @@ export class AttendanceService {
       sick: 0,
       excused: 0,
       rate: 0,
+      totalTrainings: 0,
+      totalMatches: 0,
     };
 
     attendances.forEach((a) => {
+      // Count by event type
+      if (a.training) {
+        stats.totalTrainings++;
+      } else if (a.match) {
+        stats.totalMatches++;
+      }
+
       switch (a.status) {
         case AttendanceStatus.PRESENT:
           stats.present++;
@@ -242,6 +254,8 @@ export class AttendanceService {
       sick: number;
       excused: number;
       rate: number;
+      totalTrainings: number;
+      totalMatches: number;
     }>
   > {
     const result: Array<{
@@ -254,11 +268,14 @@ export class AttendanceService {
       sick: number;
       excused: number;
       rate: number;
+      totalTrainings: number;
+      totalMatches: number;
     }> = [];
 
     for (const player of players) {
       const attendances = await this.attendanceRepository.find({
         where: { player: { id: player.id } },
+        relations: ['training', 'match'],
       });
 
       const stats = {
@@ -271,9 +288,18 @@ export class AttendanceService {
         sick: 0,
         excused: 0,
         rate: 0,
+        totalTrainings: 0,
+        totalMatches: 0,
       };
 
       attendances.forEach((a) => {
+        // Count by event type
+        if (a.training) {
+          stats.totalTrainings++;
+        } else if (a.match) {
+          stats.totalMatches++;
+        }
+
         switch (a.status) {
           case AttendanceStatus.PRESENT:
             stats.present++;

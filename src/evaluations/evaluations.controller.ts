@@ -21,6 +21,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Training } from '../events/entities/training.entity';
+import { Match } from '../events/entities/match.entity';
 
 @Controller('evaluations')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,6 +34,8 @@ export class EvaluationsController {
     private parentsRepository: Repository<Parent>,
     @InjectRepository(Training)
     private trainingsRepository: Repository<Training>,
+    @InjectRepository(Match)
+    private matchesRepository: Repository<Match>,
   ) {}
 
   @Post('batch')
@@ -94,6 +97,61 @@ export class EvaluationsController {
       }
       const childIds = childrenInGroup.map((c) => c.id);
       const allEvaluations = await this.evaluationsService.findByTraining(id);
+      return allEvaluations.filter((e) => childIds.includes(e.player.id));
+    }
+
+    throw new ForbiddenException('Access denied');
+  }
+
+  @Get('match/:id')
+  @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  async getByMatch(
+    @Param('id') id: string,
+    @Request() req: { user: { id: string; role: UserRole } },
+  ) {
+    const { id: userId, role } = req.user;
+
+    // Admins and coaches see all evaluations
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.evaluationsService.findByMatch(id);
+    }
+
+    // Get the match to verify access
+    const match = await this.matchesRepository.findOne({
+      where: { id },
+      relations: ['group'],
+    });
+    if (!match) {
+      throw new ForbiddenException('Match not found');
+    }
+
+    // Players only see their own evaluations
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['group'],
+      });
+      if (!player || player.group?.id !== match.group.id) {
+        throw new ForbiddenException('You do not have access to this match');
+      }
+      const allEvaluations = await this.evaluationsService.findByMatch(id);
+      return allEvaluations.filter((e) => e.player.id === player.id);
+    }
+
+    // Parents see their children's evaluations
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children', 'children.group'],
+      });
+      const childrenInGroup = parent?.children?.filter(
+        (child) => child.group?.id === match.group.id,
+      ) || [];
+      if (childrenInGroup.length === 0) {
+        throw new ForbiddenException('You do not have access to this match');
+      }
+      const childIds = childrenInGroup.map((c) => c.id);
+      const allEvaluations = await this.evaluationsService.findByMatch(id);
       return allEvaluations.filter((e) => childIds.includes(e.player.id));
     }
 

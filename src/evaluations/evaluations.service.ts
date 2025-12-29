@@ -9,6 +9,7 @@ import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
+import { Match } from '../events/entities/match.entity';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
 
 @Injectable()
@@ -22,6 +23,8 @@ export class EvaluationsService {
     private coachesRepository: Repository<Coach>,
     @InjectRepository(Training)
     private trainingsRepository: Repository<Training>,
+    @InjectRepository(Match)
+    private matchesRepository: Repository<Match>,
     private dataSource: DataSource,
   ) {}
 
@@ -29,17 +32,37 @@ export class EvaluationsService {
     dto: CreateEvaluationBatchDto,
     coachUserId: string,
   ): Promise<Evaluation[]> {
+    if (!dto.trainingId && !dto.matchId) {
+      throw new BadRequestException('Either trainingId or matchId is required');
+    }
+    if (dto.trainingId && dto.matchId) {
+      throw new BadRequestException('Cannot specify both trainingId and matchId');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
     try {
-      // Find training
-      const training = await queryRunner.manager.findOne(Training, {
-        where: { id: dto.trainingId },
-      });
-      if (!training) {
-        throw new NotFoundException(`Training with ID ${dto.trainingId} not found`);
+      let training: Training | null = null;
+      let match: Match | null = null;
+
+      if (dto.trainingId) {
+        training = await queryRunner.manager.findOne(Training, {
+          where: { id: dto.trainingId },
+        });
+        if (!training) {
+          throw new NotFoundException(`Training with ID ${dto.trainingId} not found`);
+        }
+      }
+
+      if (dto.matchId) {
+        match = await queryRunner.manager.findOne(Match, {
+          where: { id: dto.matchId },
+        });
+        if (!match) {
+          throw new NotFoundException(`Match with ID ${dto.matchId} not found`);
+        }
       }
 
       // Find coach by user ID
@@ -57,6 +80,7 @@ export class EvaluationsService {
           queryRunner,
           record,
           training,
+          match,
           coach,
         );
         results.push(evaluation);
@@ -66,7 +90,7 @@ export class EvaluationsService {
       return results;
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      if (error instanceof NotFoundException) {
+      if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException('Failed to create evaluations');
@@ -78,7 +102,8 @@ export class EvaluationsService {
   private async upsertEvaluation(
     queryRunner: any,
     record: EvaluationRecordDto,
-    training: Training,
+    training: Training | null,
+    match: Match | null,
     coach: Coach,
   ): Promise<Evaluation> {
     // Find player
@@ -89,14 +114,21 @@ export class EvaluationsService {
       throw new NotFoundException(`Player with ID ${record.playerId} not found`);
     }
 
-    // Check if evaluation already exists for this player, training, and type
+    // Check if evaluation already exists for this player, event, and type
+    const whereCondition: any = {
+      player: { id: record.playerId },
+      type: record.type,
+    };
+    if (training) {
+      whereCondition.training = { id: training.id };
+    }
+    if (match) {
+      whereCondition.match = { id: match.id };
+    }
+
     const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
-      where: {
-        player: { id: record.playerId },
-        training: { id: training.id },
-        type: record.type,
-      },
-      relations: ['player', 'training', 'coach'],
+      where: whereCondition,
+      relations: ['player', 'training', 'match', 'coach'],
     });
 
     if (existingEvaluation) {
@@ -110,6 +142,7 @@ export class EvaluationsService {
       const evaluation = queryRunner.manager.create(Evaluation, {
         player,
         training,
+        match,
         coach,
         type: record.type,
         rating: record.rating,
@@ -134,10 +167,25 @@ export class EvaluationsService {
     });
   }
 
+  async findByMatch(matchId: string): Promise<Evaluation[]> {
+    const match = await this.matchesRepository.findOne({
+      where: { id: matchId },
+    });
+    if (!match) {
+      throw new NotFoundException(`Match with ID ${matchId} not found`);
+    }
+
+    return await this.evaluationsRepository.find({
+      where: { match: { id: matchId } },
+      relations: ['player', 'coach', 'match'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
   async findByPlayer(playerId: string): Promise<Evaluation[]> {
     return await this.evaluationsRepository.find({
       where: { player: { id: playerId } },
-      relations: ['player', 'coach', 'training'],
+      relations: ['player', 'coach', 'training', 'match'],
       order: { createdAt: 'DESC' },
     });
   }

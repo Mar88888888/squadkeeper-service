@@ -3,6 +3,8 @@ import { BaseEntity } from '../../common/entities/base.entity';
 import { Group } from '../../groups/entities/group.entity';
 import { MatchType } from '../enums/match-type.enum';
 import { Attendance } from '../../attendance/entities/attendance.entity';
+import { Goal } from './goal.entity';
+import { Evaluation } from '../../evaluations/entities/evaluation.entity';
 
 @Entity('matches')
 export class Match extends BaseEntity {
@@ -40,4 +42,10 @@ export class Match extends BaseEntity {
 
   @OneToMany(() => Attendance, (attendance) => attendance.match)
   attendances: Attendance[];
+
+  @OneToMany(() => Goal, (goal) => goal.match)
+  goals: Goal[];
+
+  @OneToMany(() => Evaluation, (evaluation) => evaluation.match)
+  evaluations: Evaluation[];
 }

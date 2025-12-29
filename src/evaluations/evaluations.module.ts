@@ -7,9 +7,10 @@ import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
+import { Match } from '../events/entities/match.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Evaluation, Player, Parent, Coach, Training])],
+  imports: [TypeOrmModule.forFeature([Evaluation, Player, Parent, Coach, Training, Match])],
   controllers: [EvaluationsController],
   providers: [EvaluationsService],
   exports: [EvaluationsService],
