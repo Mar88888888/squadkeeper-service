@@ -4,6 +4,7 @@ import {
   Body,
   Get,
   Param,
+  Query,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -11,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { TrainingsService } from './trainings.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
+import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -30,14 +32,21 @@ export class TrainingsController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  findAll() {
-    return this.trainingsService.findAll();
+  findAll(@Query() filters: FilterTrainingsDto) {
+    return this.trainingsService.findAll(filters);
   }
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  findMyTrainings(@Request() req: { user: { id: string; role: UserRole } }) {
-    return this.trainingsService.findMyTrainings(req.user.id, req.user.role);
+  findMyTrainings(
+    @Request() req: { user: { id: string; role: UserRole } },
+    @Query() filters: FilterTrainingsDto,
+  ) {
+    return this.trainingsService.findMyTrainings(
+      req.user.id,
+      req.user.role,
+      filters,
+    );
   }
 
   @Get('group/:groupId')

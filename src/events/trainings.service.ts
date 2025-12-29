@@ -5,13 +5,24 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import {
+  Repository,
+  In,
+  Between,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+  FindOptionsWhere,
+} from 'typeorm';
 import { Training } from './entities/training.entity';
 import { Group } from '../groups/entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { CreateTrainingDto } from './dto/create-training.dto';
+import {
+  FilterTrainingsDto,
+  TrainingTimeFilter,
+} from './dto/filter-trainings.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 
 @Injectable()
@@ -28,6 +39,77 @@ export class TrainingsService {
     @InjectRepository(Parent)
     private parentsRepository: Repository<Parent>,
   ) {}
+
+  private buildDateFilter(
+    filters: FilterTrainingsDto,
+  ): FindOptionsWhere<Training> | undefined {
+    const now = new Date();
+
+    // Handle preset time filters
+    if (filters.timeFilter && filters.timeFilter !== TrainingTimeFilter.ALL) {
+      switch (filters.timeFilter) {
+        case TrainingTimeFilter.UPCOMING:
+          return { startTime: MoreThanOrEqual(now) };
+
+        case TrainingTimeFilter.PAST:
+          return { startTime: LessThanOrEqual(now) };
+
+        case TrainingTimeFilter.THIS_WEEK: {
+          const startOfWeek = new Date(now);
+          startOfWeek.setDate(now.getDate() - now.getDay() + 1); // Monday
+          startOfWeek.setHours(0, 0, 0, 0);
+          const endOfWeek = new Date(startOfWeek);
+          endOfWeek.setDate(startOfWeek.getDate() + 6);
+          endOfWeek.setHours(23, 59, 59, 999);
+          return { startTime: Between(startOfWeek, endOfWeek) };
+        }
+
+        case TrainingTimeFilter.NEXT_WEEK: {
+          const startOfNextWeek = new Date(now);
+          startOfNextWeek.setDate(now.getDate() - now.getDay() + 8); // Next Monday
+          startOfNextWeek.setHours(0, 0, 0, 0);
+          const endOfNextWeek = new Date(startOfNextWeek);
+          endOfNextWeek.setDate(startOfNextWeek.getDate() + 6);
+          endOfNextWeek.setHours(23, 59, 59, 999);
+          return { startTime: Between(startOfNextWeek, endOfNextWeek) };
+        }
+
+        case TrainingTimeFilter.THIS_MONTH: {
+          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+          const endOfMonth = new Date(
+            now.getFullYear(),
+            now.getMonth() + 1,
+            0,
+            23,
+            59,
+            59,
+            999,
+          );
+          return { startTime: Between(startOfMonth, endOfMonth) };
+        }
+      }
+    }
+
+    // Handle custom date range
+    if (filters.dateFrom && filters.dateTo) {
+      return {
+        startTime: Between(
+          new Date(filters.dateFrom),
+          new Date(filters.dateTo + 'T23:59:59.999Z'),
+        ),
+      };
+    }
+    if (filters.dateFrom) {
+      return { startTime: MoreThanOrEqual(new Date(filters.dateFrom)) };
+    }
+    if (filters.dateTo) {
+      return {
+        startTime: LessThanOrEqual(new Date(filters.dateTo + 'T23:59:59.999Z')),
+      };
+    }
+
+    return undefined;
+  }
 
   async create(createTrainingDto: CreateTrainingDto): Promise<Training> {
     // Check if group exists
@@ -54,8 +136,11 @@ export class TrainingsService {
     return await this.trainingsRepository.save(training);
   }
 
-  async findAll(): Promise<Training[]> {
+  async findAll(filters: FilterTrainingsDto = {}): Promise<Training[]> {
+    const dateFilter = this.buildDateFilter(filters);
+
     return await this.trainingsRepository.find({
+      where: dateFilter,
       relations: ['group'],
       order: { startTime: 'ASC' },
     });
@@ -155,11 +240,12 @@ export class TrainingsService {
   async findMyTrainings(
     userId: string,
     role: UserRole,
+    filters: FilterTrainingsDto = {},
   ): Promise<Training[]> {
     let groupIds: string[] = [];
 
     if (role === UserRole.ADMIN) {
-      return this.findAll();
+      return this.findAll(filters);
     }
 
     if (role === UserRole.COACH) {
@@ -201,8 +287,14 @@ export class TrainingsService {
       return [];
     }
 
+    const dateFilter = this.buildDateFilter(filters);
+    const whereCondition: FindOptionsWhere<Training> = {
+      group: { id: In(groupIds) },
+      ...dateFilter,
+    };
+
     return await this.trainingsRepository.find({
-      where: { group: { id: In(groupIds) } },
+      where: whereCondition,
       relations: ['group'],
       order: { startTime: 'ASC' },
     });
