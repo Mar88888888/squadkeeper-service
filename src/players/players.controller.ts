@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Delete,
   Body,
   Param,
@@ -14,6 +15,7 @@ import {
 } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
+import { UpdatePlayerDto } from './dto/update-player.dto';
 import { StatsPeriod, ChildrenStatsResponse } from './dto/player-stats.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -83,6 +85,15 @@ export class PlayersController {
   @HttpCode(HttpStatus.CREATED)
   create(@Body() createPlayerDto: CreatePlayerDto) {
     return this.playersService.create(createPlayerDto);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.ADMIN)
+  update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updatePlayerDto: UpdatePlayerDto,
+  ) {
+    return this.playersService.update(id, updatePlayerDto);
   }
 
   @Delete(':id')

@@ -12,6 +12,7 @@ import { User } from '../users/entities/user.entity';
 import { Player } from '../players/entities/player.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CreateParentDto } from './dto/create-parent.dto';
+import { UpdateParentDto } from './dto/update-parent.dto';
 
 @Injectable()
 export class ParentsService {
@@ -222,6 +223,76 @@ export class ParentsService {
         throw error;
       }
       throw new BadRequestException('Failed to create parent');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async update(id: string, updateParentDto: UpdateParentDto): Promise<Parent> {
+    const parent = await this.parentsRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent not found');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Update User fields if provided
+      if (parent.user) {
+        if (updateParentDto.email !== undefined) {
+          const existingUser = await queryRunner.manager.findOne(User, {
+            where: { email: updateParentDto.email },
+          });
+          if (existingUser && existingUser.id !== parent.user.id) {
+            throw new ConflictException('Email already exists');
+          }
+          parent.user.email = updateParentDto.email;
+        }
+
+        if (updateParentDto.password !== undefined) {
+          parent.user.passwordHash = await bcrypt.hash(updateParentDto.password, 10);
+        }
+
+        if (updateParentDto.firstName !== undefined) {
+          parent.user.firstName = updateParentDto.firstName;
+        }
+
+        if (updateParentDto.lastName !== undefined) {
+          parent.user.lastName = updateParentDto.lastName;
+        }
+
+        await queryRunner.manager.save(parent.user);
+      }
+
+      // Update Parent fields
+      if (updateParentDto.firstName !== undefined) {
+        parent.firstName = updateParentDto.firstName;
+      }
+
+      if (updateParentDto.lastName !== undefined) {
+        parent.lastName = updateParentDto.lastName;
+      }
+
+      if (updateParentDto.phoneNumber !== undefined) {
+        parent.phoneNumber = updateParentDto.phoneNumber;
+      }
+
+      await queryRunner.manager.save(parent);
+      await queryRunner.commitTransaction();
+
+      return parent;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to update parent');
     } finally {
       await queryRunner.release();
     }

@@ -17,6 +17,7 @@ import { Parent } from '../parents/entities/parent.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
+import { UpdatePlayerDto } from './dto/update-player.dto';
 import {
   StatsPeriod,
   PlayerStatsResponse,
@@ -363,6 +364,96 @@ export class PlayersService {
         throw error;
       }
       throw new BadRequestException('Failed to create player');
+    } finally {
+      await queryRunner.release();
+    }
+  }
+
+  async update(id: string, updatePlayerDto: UpdatePlayerDto): Promise<Player> {
+    const player = await this.playersRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!player) {
+      throw new NotFoundException('Player not found');
+    }
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      // Update User fields if provided
+      if (player.user) {
+        if (updatePlayerDto.email !== undefined) {
+          const existingUser = await queryRunner.manager.findOne(User, {
+            where: { email: updatePlayerDto.email },
+          });
+          if (existingUser && existingUser.id !== player.user.id) {
+            throw new ConflictException('Email already exists');
+          }
+          player.user.email = updatePlayerDto.email;
+        }
+
+        if (updatePlayerDto.password !== undefined) {
+          player.user.passwordHash = await bcrypt.hash(updatePlayerDto.password, 10);
+        }
+
+        if (updatePlayerDto.firstName !== undefined) {
+          player.user.firstName = updatePlayerDto.firstName;
+        }
+
+        if (updatePlayerDto.lastName !== undefined) {
+          player.user.lastName = updatePlayerDto.lastName;
+        }
+
+        await queryRunner.manager.save(player.user);
+      }
+
+      // Update Player fields
+      if (updatePlayerDto.firstName !== undefined) {
+        player.firstName = updatePlayerDto.firstName;
+      }
+
+      if (updatePlayerDto.lastName !== undefined) {
+        player.lastName = updatePlayerDto.lastName;
+      }
+
+      if (updatePlayerDto.phoneNumber !== undefined) {
+        player.phoneNumber = updatePlayerDto.phoneNumber;
+      }
+
+      if (updatePlayerDto.dateOfBirth !== undefined) {
+        player.dateOfBirth = new Date(updatePlayerDto.dateOfBirth);
+      }
+
+      if (updatePlayerDto.position !== undefined) {
+        player.position = updatePlayerDto.position;
+      }
+
+      if (updatePlayerDto.height !== undefined) {
+        player.height = updatePlayerDto.height;
+      }
+
+      if (updatePlayerDto.weight !== undefined) {
+        player.weight = updatePlayerDto.weight;
+      }
+
+      if (updatePlayerDto.strongFoot !== undefined) {
+        player.strongFoot = updatePlayerDto.strongFoot;
+      }
+
+      await queryRunner.manager.save(player);
+      await queryRunner.commitTransaction();
+
+      return player;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      if (error instanceof ConflictException) {
+        throw error;
+      }
+      throw new BadRequestException('Failed to update player');
     } finally {
       await queryRunner.release();
     }
