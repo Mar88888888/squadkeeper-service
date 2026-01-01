@@ -54,6 +54,22 @@ export class PlayersService {
         const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
         return { start, end };
       }
+      case StatsPeriod.THIS_SEASON: {
+        // Season starts on July 15 (month index 6)
+        const seasonStartMonth = 6; // July
+        const seasonStartDay = 15;
+
+        let seasonStartYear = now.getFullYear();
+        // If we're before July 15, the current season started last year
+        if (now.getMonth() < seasonStartMonth ||
+            (now.getMonth() === seasonStartMonth && now.getDate() < seasonStartDay)) {
+          seasonStartYear--;
+        }
+
+        const start = new Date(seasonStartYear, seasonStartMonth, seasonStartDay);
+        const end = new Date(seasonStartYear + 1, seasonStartMonth, seasonStartDay - 1, 23, 59, 59, 999);
+        return { start, end };
+      }
       case StatsPeriod.THIS_YEAR: {
         const start = new Date(now.getFullYear(), 0, 1);
         const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);

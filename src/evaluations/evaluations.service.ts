@@ -4,13 +4,39 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, MoreThanOrEqual, LessThanOrEqual, And } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
+import { EvaluationType } from './enums/evaluation-type.enum';
+
+export interface RatingHistoryPoint {
+  date: string;
+  eventType: 'training' | 'match';
+  eventId: string;
+  averageRating: number;
+  ratings: {
+    technical: number | null;
+    tactical: number | null;
+    physical: number | null;
+    psychological: number | null;
+  };
+}
+
+export interface RatingStats {
+  averageRating: number | null;
+  totalEvents: number;
+  byCategory: {
+    technical: number | null;
+    tactical: number | null;
+    physical: number | null;
+    psychological: number | null;
+  };
+  history: RatingHistoryPoint[];
+}
 
 @Injectable()
 export class EvaluationsService {
@@ -188,5 +214,135 @@ export class EvaluationsService {
       relations: ['player', 'coach', 'training', 'match'],
       order: { createdAt: 'DESC' },
     });
+  }
+
+  async getRatingStats(
+    playerId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<RatingStats> {
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId },
+    });
+    if (!player) {
+      throw new NotFoundException(`Player with ID ${playerId} not found`);
+    }
+
+    // Get all evaluations for the player
+    const evaluations = await this.evaluationsRepository.find({
+      where: { player: { id: playerId } },
+      relations: ['training', 'match'],
+      order: { createdAt: 'ASC' },
+    });
+
+    // Group evaluations by event (training or match)
+    const eventMap = new Map<string, {
+      date: Date;
+      eventType: 'training' | 'match';
+      eventId: string;
+      evaluations: Evaluation[];
+    }>();
+
+    for (const evaluation of evaluations) {
+      let eventDate: Date;
+      let eventType: 'training' | 'match';
+      let eventId: string;
+
+      if (evaluation.training) {
+        eventDate = new Date(evaluation.training.startTime);
+        eventType = 'training';
+        eventId = evaluation.training.id;
+      } else if (evaluation.match) {
+        eventDate = new Date(evaluation.match.startTime);
+        eventType = 'match';
+        eventId = evaluation.match.id;
+      } else {
+        continue;
+      }
+
+      // Apply date filter
+      if (startDate && eventDate < startDate) continue;
+      if (endDate && eventDate > endDate) continue;
+
+      const key = `${eventType}-${eventId}`;
+      if (!eventMap.has(key)) {
+        eventMap.set(key, {
+          date: eventDate,
+          eventType,
+          eventId,
+          evaluations: [],
+        });
+      }
+      eventMap.get(key)!.evaluations.push(evaluation);
+    }
+
+    // Build history points
+    const history: RatingHistoryPoint[] = [];
+    const allRatings: number[] = [];
+    const categoryRatings: { [key: string]: number[] } = {
+      technical: [],
+      tactical: [],
+      physical: [],
+      psychological: [],
+    };
+
+    const sortedEvents = Array.from(eventMap.values()).sort(
+      (a, b) => a.date.getTime() - b.date.getTime(),
+    );
+
+    for (const event of sortedEvents) {
+      const ratings: { [key: string]: number | null } = {
+        technical: null,
+        tactical: null,
+        physical: null,
+        psychological: null,
+      };
+
+      let sum = 0;
+      let count = 0;
+
+      for (const evaluation of event.evaluations) {
+        const categoryKey = evaluation.type.toLowerCase();
+        ratings[categoryKey] = evaluation.rating;
+        categoryRatings[categoryKey].push(evaluation.rating);
+        sum += evaluation.rating;
+        count++;
+      }
+
+      const averageRating = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
+      allRatings.push(averageRating);
+
+      history.push({
+        date: event.date.toISOString(),
+        eventType: event.eventType,
+        eventId: event.eventId,
+        averageRating,
+        ratings: {
+          technical: ratings.technical,
+          tactical: ratings.tactical,
+          physical: ratings.physical,
+          psychological: ratings.psychological,
+        },
+      });
+    }
+
+    // Calculate overall averages
+    const calculateAverage = (arr: number[]): number | null => {
+      if (arr.length === 0) return null;
+      const avg = arr.reduce((a, b) => a + b, 0) / arr.length;
+      return Math.round(avg * 10) / 10;
+    };
+
+    return {
+      averageRating: calculateAverage(allRatings),
+      totalEvents: history.length,
+      byCategory: {
+        technical: calculateAverage(categoryRatings.technical),
+        tactical: calculateAverage(categoryRatings.tactical),
+        physical: calculateAverage(categoryRatings.physical),
+        psychological: calculateAverage(categoryRatings.psychological),
+      },
+      history,
+    };
   }
 }
