@@ -8,7 +8,6 @@ import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
-import { EvaluationType } from './enums/evaluation-type.enum';
 
 describe('EvaluationsService', () => {
   let service: EvaluationsService;
@@ -46,8 +45,10 @@ describe('EvaluationsService', () => {
     coach: mockCoach,
     training: mockTraining,
     match: null,
-    type: EvaluationType.TECHNIQUE,
-    rating: 4,
+    technical: 7,
+    tactical: 6,
+    physical: 8,
+    psychological: 7,
     comment: 'Good performance',
     createdAt: new Date(),
   } as unknown as Evaluation;
@@ -116,8 +117,8 @@ describe('EvaluationsService', () => {
     const createBatchDto = {
       trainingId: 'training-123',
       records: [
-        { playerId: 'player-123', type: EvaluationType.TECHNIQUE, rating: 4, comment: 'Good' },
-        { playerId: 'player-456', type: EvaluationType.TACTICS, rating: 3 },
+        { playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7, comment: 'Good' },
+        { playerId: 'player-456', technical: 6, tactical: 5, physical: 7, psychological: 6 },
       ],
     };
 
@@ -144,7 +145,7 @@ describe('EvaluationsService', () => {
     it('should create evaluations for match', async () => {
       const matchDto = {
         matchId: 'match-123',
-        records: [{ playerId: 'player-123', type: EvaluationType.TECHNIQUE, rating: 4 }],
+        records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
 
       mockQueryRunner.manager.findOne
@@ -163,7 +164,7 @@ describe('EvaluationsService', () => {
 
     it('should throw BadRequestException when neither trainingId nor matchId', async () => {
       const invalidDto = {
-        records: [{ playerId: 'player-123', type: EvaluationType.TECHNIQUE, rating: 4 }],
+        records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
 
       await expect(service.createBatch(invalidDto as any, 'coach-user-id')).rejects.toThrow(
@@ -175,7 +176,7 @@ describe('EvaluationsService', () => {
       const invalidDto = {
         trainingId: 'training-123',
         matchId: 'match-123',
-        records: [{ playerId: 'player-123', type: EvaluationType.TECHNIQUE, rating: 4 }],
+        records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
 
       await expect(service.createBatch(invalidDto, 'coach-user-id')).rejects.toThrow(
@@ -195,7 +196,7 @@ describe('EvaluationsService', () => {
     it('should throw NotFoundException when match not found', async () => {
       const matchDto = {
         matchId: 'match-123',
-        records: [{ playerId: 'player-123', type: EvaluationType.TECHNIQUE, rating: 4 }],
+        records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
       mockQueryRunner.manager.findOne.mockResolvedValueOnce(null);
 

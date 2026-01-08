@@ -12,11 +12,13 @@ import { Group } from '../../groups/entities/group.entity';
 import { Evaluation } from '../../evaluations/entities/evaluation.entity';
 import { Parent } from '../../parents/entities/parent.entity';
 import { Attendance } from '../../attendance/entities/attendance.entity';
+import { Position } from '../enums/position.enum';
+import { StrongFoot } from '../enums/strong-foot.enum';
 
 @Entity('players')
 export class Player extends PersonEntity {
-  @Column()
-  position: string;
+  @Column({ type: 'enum', enum: Position, default: Position.CM })
+  position: Position;
 
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   height: number;
@@ -24,8 +26,8 @@ export class Player extends PersonEntity {
   @Column({ type: 'decimal', precision: 5, scale: 2 })
   weight: number;
 
-  @Column()
-  strongFoot: string;
+  @Column({ type: 'enum', enum: StrongFoot, default: StrongFoot.RIGHT })
+  strongFoot: StrongFoot;
 
   @OneToOne(() => User, (user) => user.player)
   @JoinColumn()

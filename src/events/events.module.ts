@@ -14,6 +14,7 @@ import { Group } from '../groups/entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { Parent } from '../parents/entities/parent.entity';
       Coach,
       Player,
       Parent,
+      Attendance,
     ]),
   ],
   controllers: [TrainingsController, MatchesController, ScheduleController],

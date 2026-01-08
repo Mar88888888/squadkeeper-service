@@ -1,6 +1,0 @@
-export enum EvaluationType {
-  TECHNICAL = 'TECHNICAL',
-  TACTICAL = 'TACTICAL',
-  PHYSICAL = 'PHYSICAL',
-  PSYCHOLOGICAL = 'PSYCHOLOGICAL',
-}

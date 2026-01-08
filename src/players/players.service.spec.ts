@@ -32,10 +32,10 @@ describe('PlayersService', () => {
     lastName: 'Doe',
     phoneNumber: '+380501234567',
     dateOfBirth: new Date('2010-05-15'),
-    position: 'Forward',
+    position: 'ST',
     height: 165,
     weight: 55,
-    strongFoot: 'right',
+    strongFoot: 'RIGHT',
     createdAt: new Date(),
     updatedAt: new Date(),
   } as unknown as Player;
@@ -410,10 +410,10 @@ describe('PlayersService', () => {
       lastName: 'Player',
       phoneNumber: '+380501234567',
       dateOfBirth: '2010-05-15',
-      position: 'Midfielder',
+      position: 'CM',
       height: 160,
       weight: 50,
-      strongFoot: 'left',
+      strongFoot: 'LEFT',
     };
 
     it('should create a new player with user', async () => {

@@ -12,11 +12,9 @@ import { BaseEntity } from './src/common/entities/base.entity';
 import { PersonEntity } from './src/common/entities/person.entity';
 import { UserRole } from './src/users/enums/user-role.enum';
 import { EventType } from './src/events/enums/event-type.enum';
-import { EvaluationType } from './src/evaluations/enums/evaluation-type.enum';
 
 console.log('All imports successful!');
 console.log('BaseEntity:', BaseEntity.name);
 console.log('PersonEntity (abstract):', PersonEntity.name);
 console.log('UserRole enum values:', Object.values(UserRole));
 console.log('EventType enum values:', Object.values(EventType));
-console.log('EvaluationType enum values:', Object.values(EvaluationType));

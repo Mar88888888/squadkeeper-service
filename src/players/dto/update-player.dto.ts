@@ -5,7 +5,10 @@ import {
   IsDateString,
   IsNumber,
   IsOptional,
+  IsEnum,
 } from 'class-validator';
+import { Position } from '../enums/position.enum';
+import { StrongFoot } from '../enums/strong-foot.enum';
 
 export class UpdatePlayerDto {
   @IsOptional()
@@ -34,8 +37,8 @@ export class UpdatePlayerDto {
   dateOfBirth?: string;
 
   @IsOptional()
-  @IsString()
-  position?: string;
+  @IsEnum(Position)
+  position?: Position;
 
   @IsOptional()
   @IsNumber()
@@ -46,6 +49,6 @@ export class UpdatePlayerDto {
   weight?: number;
 
   @IsOptional()
-  @IsString()
-  strongFoot?: string;
+  @IsEnum(StrongFoot)
+  strongFoot?: StrongFoot;
 }

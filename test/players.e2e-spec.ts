@@ -132,10 +132,10 @@ describe('Players (e2e)', () => {
       firstName: 'New',
       lastName: 'Player',
       dateOfBirth: '2010-01-01',
-      position: 'Forward',
+      position: 'ST',
       height: 150,
       weight: 45,
-      strongFoot: 'Right',
+      strongFoot: 'RIGHT',
     };
 
     it('should create player for admin', async () => {

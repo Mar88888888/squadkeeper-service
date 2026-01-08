@@ -13,6 +13,8 @@ import { EventsModule } from './events/events.module';
 import { AuthModule } from './auth/auth.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ContactsModule } from './contacts/contacts.module';
+import { SquadsModule } from './squads/squads.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { ContactsModule } from './contacts/contacts.module';
     AuthModule,
     AttendanceModule,
     ContactsModule,
+    SquadsModule,
+    AnalyticsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

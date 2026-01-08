@@ -3,5 +3,5 @@ export enum AttendanceStatus {
   ABSENT = 'ABSENT',
   SICK = 'SICK',
   LATE = 'LATE',
-  EXCUSED = 'EXCUSED',
+  BENCHED = 'BENCHED', // Present but didn't play - no stats/evaluations
 }

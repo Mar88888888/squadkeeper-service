@@ -339,7 +339,7 @@ describe('AttendanceService', () => {
         },
         {
           ...mockAttendance,
-          status: AttendanceStatus.EXCUSED,
+          status: AttendanceStatus.BENCHED,
           training: mockTraining,
           match: null,
         },
@@ -353,10 +353,10 @@ describe('AttendanceService', () => {
       expect(result.late).toBe(1);
       expect(result.absent).toBe(1);
       expect(result.sick).toBe(1);
-      expect(result.excused).toBe(1);
+      expect(result.benched).toBe(1);
       expect(result.totalTrainings).toBe(4);
       expect(result.totalMatches).toBe(1);
-      expect(result.rate).toBe(40); // (1 + 1) / 5 * 100 = 40%
+      expect(result.rate).toBe(60); // (1 + 1 + 1) / 5 * 100 = 60%
     });
 
     it('should return zero rate when no attendances', async () => {

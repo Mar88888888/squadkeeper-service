@@ -4,14 +4,21 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, MoreThanOrEqual, LessThanOrEqual, And } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
+import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
-import { EvaluationType } from './enums/evaluation-type.enum';
+
+// Statuses that count as "played" - can receive evaluations
+const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
+
+// Default rating for missing values
+const DEFAULT_RATING = 5;
 
 export interface RatingHistoryPoint {
   date: string;
@@ -140,16 +147,38 @@ export class EvaluationsService {
       throw new NotFoundException(`Player with ID ${record.playerId} not found`);
     }
 
-    // Check if evaluation already exists for this player, event, and type
+    // Check if player has valid attendance (PRESENT or LATE) for this event
+    const attendanceWhere: any = { player: { id: record.playerId } };
+    if (training) {
+      attendanceWhere.training = { id: training.id };
+    }
+    if (match) {
+      attendanceWhere.match = { id: match.id };
+    }
+
+    const attendance = await queryRunner.manager.findOne(Attendance, {
+      where: attendanceWhere,
+    });
+
+    if (!attendance || !PLAYED_STATUSES.includes(attendance.status)) {
+      throw new BadRequestException(
+        `Cannot evaluate player ${player.firstName} ${player.lastName} - they did not play in this event`,
+      );
+    }
+
+    // Check if evaluation already exists for this player and event
     const whereCondition: any = {
       player: { id: record.playerId },
-      type: record.type,
     };
     if (training) {
       whereCondition.training = { id: training.id };
+    } else {
+      whereCondition.training = null;
     }
     if (match) {
       whereCondition.match = { id: match.id };
+    } else {
+      whereCondition.match = null;
     }
 
     const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
@@ -158,20 +187,35 @@ export class EvaluationsService {
     });
 
     if (existingEvaluation) {
-      // Update existing evaluation
-      existingEvaluation.rating = record.rating;
-      existingEvaluation.comment = record.comment || null;
+      // Update existing evaluation - only update fields that are provided
+      if (record.technical !== undefined) {
+        existingEvaluation.technical = record.technical;
+      }
+      if (record.tactical !== undefined) {
+        existingEvaluation.tactical = record.tactical;
+      }
+      if (record.physical !== undefined) {
+        existingEvaluation.physical = record.physical;
+      }
+      if (record.psychological !== undefined) {
+        existingEvaluation.psychological = record.psychological;
+      }
+      if (record.comment !== undefined) {
+        existingEvaluation.comment = record.comment || null;
+      }
       existingEvaluation.coach = coach;
       return await queryRunner.manager.save(existingEvaluation);
     } else {
-      // Create new evaluation
+      // Create new evaluation - use default values for missing ratings
       const evaluation = queryRunner.manager.create(Evaluation, {
         player,
         training,
         match,
         coach,
-        type: record.type,
-        rating: record.rating,
+        technical: record.technical ?? DEFAULT_RATING,
+        tactical: record.tactical ?? DEFAULT_RATING,
+        physical: record.physical ?? DEFAULT_RATING,
+        psychological: record.psychological ?? DEFAULT_RATING,
         comment: record.comment || null,
       });
       return await queryRunner.manager.save(evaluation);
@@ -235,13 +279,15 @@ export class EvaluationsService {
       order: { createdAt: 'ASC' },
     });
 
-    // Group evaluations by event (training or match)
-    const eventMap = new Map<string, {
-      date: Date;
-      eventType: 'training' | 'match';
-      eventId: string;
-      evaluations: Evaluation[];
-    }>();
+    // Filter by date and build history
+    const history: RatingHistoryPoint[] = [];
+    const categoryRatings: { [key: string]: number[] } = {
+      technical: [],
+      tactical: [],
+      physical: [],
+      psychological: [],
+    };
+    const allAverages: number[] = [];
 
     for (const evaluation of evaluations) {
       let eventDate: Date;
@@ -264,64 +310,36 @@ export class EvaluationsService {
       if (startDate && eventDate < startDate) continue;
       if (endDate && eventDate > endDate) continue;
 
-      const key = `${eventType}-${eventId}`;
-      if (!eventMap.has(key)) {
-        eventMap.set(key, {
-          date: eventDate,
-          eventType,
-          eventId,
-          evaluations: [],
-        });
-      }
-      eventMap.get(key)!.evaluations.push(evaluation);
-    }
+      // Calculate average for this evaluation
+      const ratings = [
+        evaluation.technical,
+        evaluation.tactical,
+        evaluation.physical,
+        evaluation.psychological,
+      ].filter((r): r is number => r !== null);
 
-    // Build history points
-    const history: RatingHistoryPoint[] = [];
-    const allRatings: number[] = [];
-    const categoryRatings: { [key: string]: number[] } = {
-      technical: [],
-      tactical: [],
-      physical: [],
-      psychological: [],
-    };
+      const averageRating = ratings.length > 0
+        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
+        : 0;
 
-    const sortedEvents = Array.from(eventMap.values()).sort(
-      (a, b) => a.date.getTime() - b.date.getTime(),
-    );
+      allAverages.push(averageRating);
 
-    for (const event of sortedEvents) {
-      const ratings: { [key: string]: number | null } = {
-        technical: null,
-        tactical: null,
-        physical: null,
-        psychological: null,
-      };
-
-      let sum = 0;
-      let count = 0;
-
-      for (const evaluation of event.evaluations) {
-        const categoryKey = evaluation.type.toLowerCase();
-        ratings[categoryKey] = evaluation.rating;
-        categoryRatings[categoryKey].push(evaluation.rating);
-        sum += evaluation.rating;
-        count++;
-      }
-
-      const averageRating = count > 0 ? Math.round((sum / count) * 10) / 10 : 0;
-      allRatings.push(averageRating);
+      // Collect category ratings
+      if (evaluation.technical !== null) categoryRatings.technical.push(evaluation.technical);
+      if (evaluation.tactical !== null) categoryRatings.tactical.push(evaluation.tactical);
+      if (evaluation.physical !== null) categoryRatings.physical.push(evaluation.physical);
+      if (evaluation.psychological !== null) categoryRatings.psychological.push(evaluation.psychological);
 
       history.push({
-        date: event.date.toISOString(),
-        eventType: event.eventType,
-        eventId: event.eventId,
+        date: eventDate.toISOString(),
+        eventType,
+        eventId,
         averageRating,
         ratings: {
-          technical: ratings.technical,
-          tactical: ratings.tactical,
-          physical: ratings.physical,
-          psychological: ratings.psychological,
+          technical: evaluation.technical,
+          tactical: evaluation.tactical,
+          physical: evaluation.physical,
+          psychological: evaluation.psychological,
         },
       });
     }
@@ -334,7 +352,7 @@ export class EvaluationsService {
     };
 
     return {
-      averageRating: calculateAverage(allRatings),
+      averageRating: calculateAverage(allAverages),
       totalEvents: history.length,
       byCategory: {
         technical: calculateAverage(categoryRatings.technical),

@@ -7,23 +7,37 @@ import {
   IsInt,
   IsString,
   IsOptional,
-  IsEnum,
   Min,
   Max,
 } from 'class-validator';
-import { EvaluationType } from '../enums/evaluation-type.enum';
 
 export class EvaluationRecordDto {
   @IsUUID()
   playerId: string;
 
-  @IsEnum(EvaluationType)
-  type: EvaluationType;
-
+  @IsOptional()
   @IsInt()
   @Min(1)
   @Max(10)
-  rating: number;
+  technical?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  tactical?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  physical?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  psychological?: number;
 
   @IsOptional()
   @IsString()

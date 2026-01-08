@@ -19,12 +19,17 @@ import { Group } from '../groups/entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
+import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto, MatchTimeFilter } from './dto/filter-matches.dto';
 import { AddGoalDto } from './dto/add-goal.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MatchType } from './enums/match-type.enum';
+
+// Attendance statuses that allow goal/assist recording
+const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
 @Injectable()
 export class MatchesService {
@@ -41,7 +46,29 @@ export class MatchesService {
     private playersRepository: Repository<Player>,
     @InjectRepository(Parent)
     private parentsRepository: Repository<Parent>,
+    @InjectRepository(Attendance)
+    private attendanceRepository: Repository<Attendance>,
   ) {}
+
+  private async validatePlayerPlayed(
+    playerId: string,
+    matchId: string,
+    playerName: string,
+    role: 'scorer' | 'assist',
+  ): Promise<void> {
+    const attendance = await this.attendanceRepository.findOne({
+      where: {
+        player: { id: playerId },
+        match: { id: matchId },
+      },
+    });
+
+    if (!attendance || !PLAYED_STATUSES.includes(attendance.status)) {
+      throw new BadRequestException(
+        `Cannot record ${role} for ${playerName} - player was not present at this match`,
+      );
+    }
+  }
 
   private buildDateFilter(
     filters: FilterMatchesDto,
@@ -353,6 +380,14 @@ export class MatchesService {
       throw new NotFoundException(`Player with id ${addGoalDto.scorerId} not found`);
     }
 
+    // Validate scorer was present at the match
+    await this.validatePlayerPlayed(
+      scorer.id,
+      matchId,
+      `${scorer.firstName} ${scorer.lastName}`,
+      'scorer',
+    );
+
     let assist: Player | null = null;
     if (addGoalDto.assistId) {
       assist = await this.playersRepository.findOne({
@@ -361,6 +396,14 @@ export class MatchesService {
       if (!assist) {
         throw new NotFoundException(`Player with id ${addGoalDto.assistId} not found`);
       }
+
+      // Validate assist player was present at the match
+      await this.validatePlayerPlayed(
+        assist.id,
+        matchId,
+        `${assist.firstName} ${assist.lastName}`,
+        'assist',
+      );
     }
 
     const goal = this.goalsRepository.create({

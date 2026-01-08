@@ -184,7 +184,7 @@ export class AttendanceService {
     absent: number;
     late: number;
     sick: number;
-    excused: number;
+    benched: number;
     rate: number;
     totalTrainings: number;
     totalMatches: number;
@@ -200,7 +200,7 @@ export class AttendanceService {
       absent: 0,
       late: 0,
       sick: 0,
-      excused: 0,
+      benched: 0,
       rate: 0,
       totalTrainings: 0,
       totalMatches: 0,
@@ -227,15 +227,16 @@ export class AttendanceService {
         case AttendanceStatus.SICK:
           stats.sick++;
           break;
-        case AttendanceStatus.EXCUSED:
-          stats.excused++;
+        case AttendanceStatus.BENCHED:
+          stats.benched++;
           break;
       }
     });
 
-    // Calculate rate: (present + late) / total * 100
+    // Calculate rate: (present + late + benched) / total * 100
+    const attended = stats.present + stats.late + stats.benched;
     if (stats.total > 0) {
-      stats.rate = Math.round(((stats.present + stats.late) / stats.total) * 100);
+      stats.rate = Math.round((attended / stats.total) * 100);
     }
 
     return stats;
@@ -252,7 +253,7 @@ export class AttendanceService {
       absent: number;
       late: number;
       sick: number;
-      excused: number;
+      benched: number;
       rate: number;
       totalTrainings: number;
       totalMatches: number;
@@ -266,7 +267,7 @@ export class AttendanceService {
       absent: number;
       late: number;
       sick: number;
-      excused: number;
+      benched: number;
       rate: number;
       totalTrainings: number;
       totalMatches: number;
@@ -286,7 +287,7 @@ export class AttendanceService {
         absent: 0,
         late: 0,
         sick: 0,
-        excused: 0,
+        benched: 0,
         rate: 0,
         totalTrainings: 0,
         totalMatches: 0,
@@ -313,16 +314,16 @@ export class AttendanceService {
           case AttendanceStatus.SICK:
             stats.sick++;
             break;
-          case AttendanceStatus.EXCUSED:
-            stats.excused++;
+          case AttendanceStatus.BENCHED:
+            stats.benched++;
             break;
         }
       });
 
+      // Calculate rate: (present + late + benched) / total * 100
+      const attended = stats.present + stats.late + stats.benched;
       if (stats.total > 0) {
-        stats.rate = Math.round(
-          ((stats.present + stats.late) / stats.total) * 100,
-        );
+        stats.rate = Math.round((attended / stats.total) * 100);
       }
 
       result.push(stats);

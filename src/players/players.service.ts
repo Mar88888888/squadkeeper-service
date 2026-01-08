@@ -24,6 +24,16 @@ import {
   TeamStatsResponse,
   ChildrenStatsResponse,
 } from './dto/player-stats.dto';
+import { Position } from './enums/position.enum';
+
+// Defensive positions that can earn clean sheets
+const DEFENSIVE_POSITIONS = [
+  Position.GK,
+  Position.CB,
+  Position.LB,
+  Position.RB,
+  Position.CDM,
+];
 
 @Injectable()
 export class PlayersService {
@@ -145,12 +155,99 @@ export class PlayersService {
 
     const assists = await assistsQuery.getCount();
 
+    // Count clean sheets (only for defensive positions)
+    let cleanSheets = 0;
+    if (DEFENSIVE_POSITIONS.includes(player.position)) {
+      const cleanSheetsQuery = this.attendanceRepository
+        .createQueryBuilder('a')
+        .innerJoin('a.match', 'm')
+        .where('a.player.id = :playerId', { playerId })
+        .andWhere('a.match IS NOT NULL')
+        .andWhere('a.status IN (:...statuses)', {
+          statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
+        })
+        .andWhere('m.homeGoals IS NOT NULL')
+        .andWhere('m.awayGoals IS NOT NULL')
+        .andWhere(
+          '((m.isHome = true AND m.awayGoals = 0) OR (m.isHome = false AND m.homeGoals = 0))',
+        );
+
+      if (dateRange.start && dateRange.end) {
+        cleanSheetsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+          start: dateRange.start,
+          end: dateRange.end,
+        });
+      }
+
+      cleanSheets = await cleanSheetsQuery.getCount();
+    }
+
+    // Calculate attendance stats
+    const attendanceQuery = this.attendanceRepository
+      .createQueryBuilder('a')
+      .leftJoin('a.training', 't')
+      .leftJoin('a.match', 'm')
+      .where('a.player.id = :playerId', { playerId });
+
+    if (dateRange.start && dateRange.end) {
+      attendanceQuery.andWhere(
+        '((t.startTime BETWEEN :start AND :end) OR (m.startTime BETWEEN :start AND :end))',
+        { start: dateRange.start, end: dateRange.end },
+      );
+    }
+
+    const allAttendances = await attendanceQuery.getMany();
+
+    const attendance = {
+      total: allAttendances.length,
+      present: 0,
+      late: 0,
+      benched: 0,
+      absent: 0,
+      sick: 0,
+      rate: 0,
+      totalTrainings: 0,
+      totalMatches: 0,
+    };
+
+    for (const a of allAttendances) {
+      if (a.training) attendance.totalTrainings++;
+      if (a.match) attendance.totalMatches++;
+
+      switch (a.status) {
+        case AttendanceStatus.PRESENT:
+          attendance.present++;
+          break;
+        case AttendanceStatus.LATE:
+          attendance.late++;
+          break;
+        case AttendanceStatus.BENCHED:
+          attendance.benched++;
+          break;
+        case AttendanceStatus.ABSENT:
+          attendance.absent++;
+          break;
+        case AttendanceStatus.SICK:
+          attendance.sick++;
+          break;
+      }
+    }
+
+    // Calculate rate: (present + late + benched) / total * 100
+    const attended = attendance.present + attendance.late + attendance.benched;
+    if (attendance.total > 0) {
+      attendance.rate = Math.round((attended / attendance.total) * 100);
+    }
+
     return {
       playerId: player.id,
       playerName: `${player.firstName} ${player.lastName}`,
+      position: player.position,
       matchesPlayed,
       goals,
       assists,
+      cleanSheets,
+      attendance,
       period,
     };
   }
