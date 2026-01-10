@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, In, MoreThanOrEqual, Between } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Player } from './entities/player.entity';
 import { User } from '../users/entities/user.entity';
@@ -24,24 +24,27 @@ import {
   TeamStatsResponse,
   ChildrenStatsResponse,
 } from './dto/player-stats.dto';
-import { Position } from './enums/position.enum';
+import { Position, DEFENSIVE_POSITIONS } from './enums/position.enum';
 
-// Defensive positions that can earn clean sheets
-const DEFENSIVE_POSITIONS = [
-  Position.GK,
-  Position.CB,
-  Position.LB,
-  Position.RB,
-  Position.CDM,
-];
+type DateRange = { start?: Date; end?: Date };
+
+interface AttendanceStats {
+  total: number;
+  present: number;
+  late: number;
+  benched: number;
+  absent: number;
+  sick: number;
+  rate: number;
+  totalTrainings: number;
+  totalMatches: number;
+}
 
 @Injectable()
 export class PlayersService {
   constructor(
     @InjectRepository(Player)
     private playersRepository: Repository<Player>,
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
     @InjectRepository(Goal)
     private goalsRepository: Repository<Goal>,
     @InjectRepository(Attendance)
@@ -55,29 +58,50 @@ export class PlayersService {
     private dataSource: DataSource,
   ) {}
 
-  private getDateRangeForPeriod(period: StatsPeriod): { start?: Date; end?: Date } {
+  private getDateRangeForPeriod(period: StatsPeriod): DateRange {
     const now = new Date();
 
     switch (period) {
       case StatsPeriod.THIS_MONTH: {
         const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+        const end = new Date(
+          now.getFullYear(),
+          now.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
         return { start, end };
       }
       case StatsPeriod.THIS_SEASON: {
-        // Season starts on July 15 (month index 6)
-        const seasonStartMonth = 6; // July
+        const seasonStartMonth = 6;
         const seasonStartDay = 15;
 
         let seasonStartYear = now.getFullYear();
-        // If we're before July 15, the current season started last year
-        if (now.getMonth() < seasonStartMonth ||
-            (now.getMonth() === seasonStartMonth && now.getDate() < seasonStartDay)) {
+        if (
+          now.getMonth() < seasonStartMonth ||
+          (now.getMonth() === seasonStartMonth &&
+            now.getDate() < seasonStartDay)
+        ) {
           seasonStartYear--;
         }
 
-        const start = new Date(seasonStartYear, seasonStartMonth, seasonStartDay);
-        const end = new Date(seasonStartYear + 1, seasonStartMonth, seasonStartDay - 1, 23, 59, 59, 999);
+        const start = new Date(
+          seasonStartYear,
+          seasonStartMonth,
+          seasonStartDay,
+        );
+        const end = new Date(
+          seasonStartYear + 1,
+          seasonStartMonth,
+          seasonStartDay - 1,
+          23,
+          59,
+          59,
+          999,
+        );
         return { start, end };
       }
       case StatsPeriod.THIS_YEAR: {
@@ -91,10 +115,7 @@ export class PlayersService {
     }
   }
 
-  async getPlayerStats(
-    playerId: string,
-    period: StatsPeriod = StatsPeriod.ALL_TIME,
-  ): Promise<PlayerStatsResponse> {
+  private async findPlayerById(playerId: string): Promise<Player> {
     const player = await this.playersRepository.findOne({
       where: { id: playerId },
     });
@@ -103,10 +124,28 @@ export class PlayersService {
       throw new NotFoundException(`Player with id ${playerId} not found`);
     }
 
-    const dateRange = this.getDateRangeForPeriod(period);
+    return player;
+  }
 
-    // Count matches played (attendance with PRESENT or LATE status for matches)
-    const matchesQuery = this.attendanceRepository
+  async findPlayerByUserId(userId: string): Promise<Player> {
+    const player = await this.playersRepository
+      .createQueryBuilder('player')
+      .innerJoin('player.user', 'user')
+      .where('user.id = :userId', { userId })
+      .getOne();
+
+    if (!player) {
+      throw new NotFoundException('Player profile not found');
+    }
+
+    return player;
+  }
+
+  private async getMatchesPlayedCount(
+    playerId: string,
+    dateRange: DateRange,
+  ): Promise<number> {
+    const query = this.attendanceRepository
       .createQueryBuilder('a')
       .innerJoin('a.match', 'm')
       .where('a.player.id = :playerId', { playerId })
@@ -116,89 +155,107 @@ export class PlayersService {
       });
 
     if (dateRange.start && dateRange.end) {
-      matchesQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
     }
 
-    const matchesPlayed = await matchesQuery.getCount();
+    return query.getCount();
+  }
 
-    // Count goals (excluding own goals)
-    const goalsQuery = this.goalsRepository
+  private async getGoalsCount(
+    playerId: string,
+    dateRange: DateRange,
+  ): Promise<number> {
+    const query = this.goalsRepository
       .createQueryBuilder('g')
       .innerJoin('g.match', 'm')
       .where('g.scorer.id = :playerId', { playerId })
       .andWhere('g.isOwnGoal = false');
 
     if (dateRange.start && dateRange.end) {
-      goalsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
     }
 
-    const goals = await goalsQuery.getCount();
+    return query.getCount();
+  }
 
-    // Count assists
-    const assistsQuery = this.goalsRepository
+  private async getAssistsCount(
+    playerId: string,
+    dateRange: DateRange,
+  ): Promise<number> {
+    const query = this.goalsRepository
       .createQueryBuilder('g')
       .innerJoin('g.match', 'm')
       .where('g.assist.id = :playerId', { playerId });
 
     if (dateRange.start && dateRange.end) {
-      assistsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
         start: dateRange.start,
         end: dateRange.end,
       });
     }
 
-    const assists = await assistsQuery.getCount();
+    return query.getCount();
+  }
 
-    // Count clean sheets (only for defensive positions)
-    let cleanSheets = 0;
-    if (DEFENSIVE_POSITIONS.includes(player.position)) {
-      const cleanSheetsQuery = this.attendanceRepository
-        .createQueryBuilder('a')
-        .innerJoin('a.match', 'm')
-        .where('a.player.id = :playerId', { playerId })
-        .andWhere('a.match IS NOT NULL')
-        .andWhere('a.status IN (:...statuses)', {
-          statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
-        })
-        .andWhere('m.homeGoals IS NOT NULL')
-        .andWhere('m.awayGoals IS NOT NULL')
-        .andWhere(
-          '((m.isHome = true AND m.awayGoals = 0) OR (m.isHome = false AND m.homeGoals = 0))',
-        );
-
-      if (dateRange.start && dateRange.end) {
-        cleanSheetsQuery.andWhere('m.startTime BETWEEN :start AND :end', {
-          start: dateRange.start,
-          end: dateRange.end,
-        });
-      }
-
-      cleanSheets = await cleanSheetsQuery.getCount();
+  private async getCleanSheetsCount(
+    playerId: string,
+    position: Position,
+    dateRange: DateRange,
+  ): Promise<number> {
+    if (!DEFENSIVE_POSITIONS.includes(position)) {
+      return 0;
     }
 
-    // Calculate attendance stats
-    const attendanceQuery = this.attendanceRepository
+    const query = this.attendanceRepository
+      .createQueryBuilder('a')
+      .innerJoin('a.match', 'm')
+      .where('a.player.id = :playerId', { playerId })
+      .andWhere('a.match IS NOT NULL')
+      .andWhere('a.status IN (:...statuses)', {
+        statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
+      })
+      .andWhere('m.homeGoals IS NOT NULL')
+      .andWhere('m.awayGoals IS NOT NULL')
+      .andWhere(
+        '((m.isHome = true AND m.awayGoals = 0) OR (m.isHome = false AND m.homeGoals = 0))',
+      );
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    return query.getCount();
+  }
+
+  private async getAttendanceStats(
+    playerId: string,
+    dateRange: DateRange,
+  ): Promise<AttendanceStats> {
+    const query = this.attendanceRepository
       .createQueryBuilder('a')
       .leftJoin('a.training', 't')
       .leftJoin('a.match', 'm')
       .where('a.player.id = :playerId', { playerId });
 
     if (dateRange.start && dateRange.end) {
-      attendanceQuery.andWhere(
+      query.andWhere(
         '((t.startTime BETWEEN :start AND :end) OR (m.startTime BETWEEN :start AND :end))',
         { start: dateRange.start, end: dateRange.end },
       );
     }
 
-    const allAttendances = await attendanceQuery.getMany();
+    const allAttendances = await query.getMany();
 
-    const attendance = {
+    const stats: AttendanceStats = {
       total: allAttendances.length,
       present: 0,
       late: 0,
@@ -211,33 +268,51 @@ export class PlayersService {
     };
 
     for (const a of allAttendances) {
-      if (a.training) attendance.totalTrainings++;
-      if (a.match) attendance.totalMatches++;
+      if (a.training) stats.totalTrainings++;
+      if (a.match) stats.totalMatches++;
 
       switch (a.status) {
         case AttendanceStatus.PRESENT:
-          attendance.present++;
+          stats.present++;
           break;
         case AttendanceStatus.LATE:
-          attendance.late++;
+          stats.late++;
           break;
         case AttendanceStatus.BENCHED:
-          attendance.benched++;
+          stats.benched++;
           break;
         case AttendanceStatus.ABSENT:
-          attendance.absent++;
+          stats.absent++;
           break;
         case AttendanceStatus.SICK:
-          attendance.sick++;
+          stats.sick++;
           break;
       }
     }
 
-    // Calculate rate: (present + late + benched) / total * 100
-    const attended = attendance.present + attendance.late + attendance.benched;
-    if (attendance.total > 0) {
-      attendance.rate = Math.round((attended / attendance.total) * 100);
+    const attended = stats.present + stats.late + stats.benched;
+    if (stats.total > 0) {
+      stats.rate = Math.round((attended / stats.total) * 100);
     }
+
+    return stats;
+  }
+
+  async getPlayerStats(
+    playerId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ): Promise<PlayerStatsResponse> {
+    const player = await this.findPlayerById(playerId);
+    const dateRange = this.getDateRangeForPeriod(period);
+
+    const [matchesPlayed, goals, assists, cleanSheets, attendance] =
+      await Promise.all([
+        this.getMatchesPlayedCount(playerId, dateRange),
+        this.getGoalsCount(playerId, dateRange),
+        this.getAssistsCount(playerId, dateRange),
+        this.getCleanSheetsCount(playerId, player.position, dateRange),
+        this.getAttendanceStats(playerId, dateRange),
+      ]);
 
     return {
       playerId: player.id,
@@ -252,28 +327,10 @@ export class PlayersService {
     };
   }
 
-  async getMyStats(
-    userId: string,
-    period: StatsPeriod = StatsPeriod.ALL_TIME,
-  ): Promise<PlayerStatsResponse> {
-    const player = await this.playersRepository
-      .createQueryBuilder('player')
-      .innerJoin('player.user', 'user')
-      .where('user.id = :userId', { userId })
-      .getOne();
-
-    if (!player) {
-      throw new NotFoundException('Player profile not found');
-    }
-
-    return this.getPlayerStats(player.id, period);
-  }
-
   async getTeamStats(
     userId: string,
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<TeamStatsResponse[]> {
-    // Find coach and their groups
     const coach = await this.coachesRepository.findOne({
       where: { user: { id: userId } },
       relations: ['headGroups', 'assistantGroups'],
@@ -292,7 +349,6 @@ export class PlayersService {
       return [];
     }
 
-    // Get all groups with players
     const groups = await this.groupsRepository.find({
       where: { id: In(groupIds) },
       relations: ['players'],
@@ -309,7 +365,6 @@ export class PlayersService {
         playerStats.push(stats);
       }
 
-      // Sort by goals, then assists
       playerStats.sort((a, b) => {
         if (b.goals !== a.goals) return b.goals - a.goals;
         return b.assists - a.assists;
@@ -331,7 +386,6 @@ export class PlayersService {
     childId?: string,
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<ChildrenStatsResponse> {
-    // Find parent by user ID
     const parent = await this.parentsRepository
       .createQueryBuilder('parent')
       .innerJoin('parent.user', 'user')
@@ -349,15 +403,12 @@ export class PlayersService {
       lastName: child.lastName,
     }));
 
-    // If no children, return empty
     if (children.length === 0) {
       return { children: [], stats: null };
     }
 
-    // If childId specified, use it; otherwise use first child
     const selectedChildId = childId || children[0].id;
 
-    // Verify the child belongs to this parent
     const isValidChild = children.some((c) => c.id === selectedChildId);
     if (!isValidChild) {
       throw new BadRequestException('Child does not belong to this parent');
@@ -392,7 +443,6 @@ export class PlayersService {
     try {
       const userId = player.user?.id;
 
-      // First, break the bidirectional reference from User to Player
       if (userId) {
         await queryRunner.manager
           .createQueryBuilder()
@@ -402,10 +452,8 @@ export class PlayersService {
           .execute();
       }
 
-      // Now we can safely remove the player
       await queryRunner.manager.remove(player);
 
-      // Finally delete the user
       if (userId) {
         await queryRunner.manager.delete(User, userId);
       }
@@ -425,7 +473,6 @@ export class PlayersService {
     await queryRunner.startTransaction();
 
     try {
-      // Check if email already exists
       const existingUser = await queryRunner.manager.findOne(User, {
         where: { email: createPlayerDto.email },
       });
@@ -434,10 +481,8 @@ export class PlayersService {
         throw new ConflictException('Email already exists');
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(createPlayerDto.password, 10);
 
-      // Create User
       const user = queryRunner.manager.create(User, {
         email: createPlayerDto.email,
         passwordHash: hashedPassword,
@@ -448,7 +493,6 @@ export class PlayersService {
 
       await queryRunner.manager.save(user);
 
-      // Create Player Profile (parent is null initially)
       const player = queryRunner.manager.create(Player, {
         position: createPlayerDto.position,
         height: createPlayerDto.height,
@@ -459,12 +503,10 @@ export class PlayersService {
         phoneNumber: createPlayerDto.phoneNumber,
         dateOfBirth: new Date(createPlayerDto.dateOfBirth),
         user,
-        // parent is nullable and will be null by default
       });
 
       await queryRunner.manager.save(player);
 
-      // Link User to Player
       user.player = player;
       await queryRunner.manager.save(user);
 
@@ -497,7 +539,6 @@ export class PlayersService {
     await queryRunner.startTransaction();
 
     try {
-      // Update User fields if provided
       if (player.user) {
         if (updatePlayerDto.email !== undefined) {
           const existingUser = await queryRunner.manager.findOne(User, {
@@ -510,7 +551,10 @@ export class PlayersService {
         }
 
         if (updatePlayerDto.password !== undefined) {
-          player.user.passwordHash = await bcrypt.hash(updatePlayerDto.password, 10);
+          player.user.passwordHash = await bcrypt.hash(
+            updatePlayerDto.password,
+            10,
+          );
         }
 
         if (updatePlayerDto.firstName !== undefined) {
@@ -524,7 +568,6 @@ export class PlayersService {
         await queryRunner.manager.save(player.user);
       }
 
-      // Update Player fields
       if (updatePlayerDto.firstName !== undefined) {
         player.firstName = updatePlayerDto.firstName;
       }

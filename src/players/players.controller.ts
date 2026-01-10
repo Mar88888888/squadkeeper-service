@@ -35,12 +35,13 @@ export class PlayersController {
 
   @Get('stats/my')
   @Roles(UserRole.PLAYER)
-  getMyStats(
+  async getMyStats(
     @Request() req: { user: { id: string } },
     @Query('period') period?: StatsPeriod,
   ) {
-    return this.playersService.getMyStats(
-      req.user.id,
+    const player = await this.playersService.findPlayerByUserId(req.user.id);
+    return this.playersService.getPlayerStats(
+      player.id,
       period || StatsPeriod.ALL_TIME,
     );
   }

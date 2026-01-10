@@ -19,8 +19,6 @@ export class ParentsService {
   constructor(
     @InjectRepository(Parent)
     private parentsRepository: Repository<Parent>,
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
     @InjectRepository(Player)
     private playersRepository: Repository<Player>,
     private dataSource: DataSource,
@@ -48,7 +46,6 @@ export class ParentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Unlink children first
       if (parent.children && parent.children.length > 0) {
         await queryRunner.manager
           .createQueryBuilder()
@@ -60,7 +57,6 @@ export class ParentsService {
 
       const userId = parent.user?.id;
 
-      // Break the bidirectional reference from User to Parent
       if (userId) {
         await queryRunner.manager
           .createQueryBuilder()
@@ -70,10 +66,8 @@ export class ParentsService {
           .execute();
       }
 
-      // Now we can safely remove the parent
       await queryRunner.manager.remove(parent);
 
-      // Finally delete the user
       if (userId) {
         await queryRunner.manager.delete(User, userId);
       }
@@ -133,7 +127,9 @@ export class ParentsService {
     });
 
     if (!player) {
-      throw new NotFoundException('Player not found or not linked to this parent');
+      throw new NotFoundException(
+        'Player not found or not linked to this parent',
+      );
     }
 
     player.parent = null as unknown as Parent;
@@ -151,7 +147,6 @@ export class ParentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Check if email already exists
       const existingUser = await queryRunner.manager.findOne(User, {
         where: { email: createParentDto.email },
       });
@@ -160,10 +155,8 @@ export class ParentsService {
         throw new ConflictException('Email already exists');
       }
 
-      // Hash password
       const hashedPassword = await bcrypt.hash(createParentDto.password, 10);
 
-      // Create User
       const user = queryRunner.manager.create(User, {
         email: createParentDto.email,
         passwordHash: hashedPassword,
@@ -174,7 +167,6 @@ export class ParentsService {
 
       await queryRunner.manager.save(user);
 
-      // Create Parent Profile
       const parent = queryRunner.manager.create(Parent, {
         firstName: createParentDto.firstName,
         lastName: createParentDto.lastName,
@@ -184,16 +176,13 @@ export class ParentsService {
 
       await queryRunner.manager.save(parent);
 
-      // Link User to Parent
       user.parent = parent;
       await queryRunner.manager.save(user);
 
-      // Linking Logic: If childrenIds is provided and not empty
       if (
         createParentDto.childrenIds &&
         createParentDto.childrenIds.length > 0
       ) {
-        // Verify all players exist
         const players = await queryRunner.manager.find(Player, {
           where: { id: In(createParentDto.childrenIds) },
         });
@@ -202,7 +191,6 @@ export class ParentsService {
           throw new NotFoundException('One or more players not found');
         }
 
-        // Update players with parentId
         await queryRunner.manager
           .createQueryBuilder()
           .update(Player)
@@ -243,7 +231,6 @@ export class ParentsService {
     await queryRunner.startTransaction();
 
     try {
-      // Update User fields if provided
       if (parent.user) {
         if (updateParentDto.email !== undefined) {
           const existingUser = await queryRunner.manager.findOne(User, {
@@ -256,7 +243,10 @@ export class ParentsService {
         }
 
         if (updateParentDto.password !== undefined) {
-          parent.user.passwordHash = await bcrypt.hash(updateParentDto.password, 10);
+          parent.user.passwordHash = await bcrypt.hash(
+            updateParentDto.password,
+            10,
+          );
         }
 
         if (updateParentDto.firstName !== undefined) {
@@ -270,7 +260,6 @@ export class ParentsService {
         await queryRunner.manager.save(parent.user);
       }
 
-      // Update Parent fields
       if (updateParentDto.firstName !== undefined) {
         parent.firstName = updateParentDto.firstName;
       }

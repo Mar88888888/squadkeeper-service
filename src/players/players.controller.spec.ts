@@ -117,7 +117,6 @@ describe('PlayersController', () => {
 
       await controller.getMyStats(req, StatsPeriod.LAST_MONTH);
 
-      // Controller uses default when period is falsy, but LAST_MONTH should be passed
       expect(playersService.getMyStats).toHaveBeenCalled();
     });
   });

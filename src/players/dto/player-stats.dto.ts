@@ -14,7 +14,7 @@ export interface AttendanceBreakdown {
   benched: number;
   absent: number;
   sick: number;
-  rate: number; // percentage
+  rate: number;
   totalTrainings: number;
   totalMatches: number;
 }

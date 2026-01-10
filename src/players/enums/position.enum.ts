@@ -10,3 +10,11 @@ export enum Position {
   RW = 'RW',
   ST = 'ST',
 }
+
+export const DEFENSIVE_POSITIONS: Position[] = [
+  Position.GK,
+  Position.CB,
+  Position.LB,
+  Position.RB,
+  Position.CDM,
+];
