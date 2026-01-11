@@ -43,25 +43,19 @@ describe('AttendanceService', () => {
     updatedAt: new Date(),
   } as unknown as Attendance;
 
-  let mockQueryRunner: any;
+  let mockManager: any;
+  let mockDataSource: any;
 
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        findOne: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-        delete: jest.fn(),
-      },
+    mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      delete: jest.fn(),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockAttendanceRepository = {
@@ -125,7 +119,7 @@ describe('AttendanceService', () => {
     };
 
     it('should mark attendance for training', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(mockPlayer)
         .mockResolvedValueOnce(null)
@@ -134,17 +128,14 @@ describe('AttendanceService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(mockTraining);
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) =>
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) =>
         Promise.resolve(entity),
       );
 
       const result = await service.markBatch(markBatchDto);
 
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.release).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(result).toHaveLength(2);
     });
 
@@ -155,14 +146,14 @@ describe('AttendanceService', () => {
         records: [{ playerId: 'player-123', status: AttendanceStatus.PRESENT }],
       };
 
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockMatch)
         .mockResolvedValueOnce(mockPlayer)
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(mockMatch);
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) =>
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) =>
         Promise.resolve(entity),
       );
 
@@ -172,12 +163,11 @@ describe('AttendanceService', () => {
     });
 
     it('should throw NotFoundException when training not found', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValueOnce(null);
+      mockManager.findOne.mockResolvedValueOnce(null);
 
       await expect(service.markBatch(markBatchDto)).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when match not found', async () => {
@@ -187,7 +177,7 @@ describe('AttendanceService', () => {
         records: [{ playerId: 'player-123', status: AttendanceStatus.PRESENT }],
       };
 
-      mockQueryRunner.manager.findOne.mockResolvedValueOnce(null);
+      mockManager.findOne.mockResolvedValueOnce(null);
 
       await expect(service.markBatch(matchDto)).rejects.toThrow(
         NotFoundException,
@@ -195,7 +185,7 @@ describe('AttendanceService', () => {
     });
 
     it('should throw NotFoundException when player not found', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(null);
 
@@ -206,7 +196,7 @@ describe('AttendanceService', () => {
 
     it('should update existing attendance', async () => {
       const existingAttendance = { ...mockAttendance };
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(mockPlayer)
         .mockResolvedValueOnce(existingAttendance)
@@ -214,8 +204,8 @@ describe('AttendanceService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(mockTraining);
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) =>
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) =>
         Promise.resolve(entity),
       );
 
@@ -235,19 +225,19 @@ describe('AttendanceService', () => {
         records: [{ playerId: 'player-123', status: AttendanceStatus.ABSENT }],
       };
 
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(mockPlayer)
         .mockResolvedValueOnce(existingAttendance);
 
-      mockQueryRunner.manager.save.mockImplementation((entity) =>
+      mockManager.save.mockImplementation((entity) =>
         Promise.resolve(entity),
       );
-      mockQueryRunner.manager.delete.mockResolvedValue({ affected: 1 });
+      mockManager.delete.mockResolvedValue({ affected: 1 });
 
       await service.markBatch(dto);
 
-      expect(mockQueryRunner.manager.delete).toHaveBeenCalled();
+      expect(mockManager.delete).toHaveBeenCalled();
     });
   });
 

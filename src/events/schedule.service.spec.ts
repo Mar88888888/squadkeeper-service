@@ -12,7 +12,8 @@ describe('ScheduleService', () => {
   let scheduleRepository: jest.Mocked<Repository<TrainingSchedule>>;
   let trainingRepository: jest.Mocked<Repository<Training>>;
   let groupRepository: jest.Mocked<Repository<Group>>;
-  let mockQueryRunner: any;
+  let mockManager: any;
+  let mockDataSource: any;
 
   const mockGroup = {
     id: 'group-123',
@@ -38,21 +39,14 @@ describe('ScheduleService', () => {
   } as unknown as Training;
 
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        delete: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-      },
+    mockManager = {
+      delete: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockScheduleRepository = {
@@ -126,13 +120,13 @@ describe('ScheduleService', () => {
 
     it('should update schedule for a group', async () => {
       groupRepository.findOne.mockResolvedValue(mockGroup);
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockResolvedValue([mockSchedule]);
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockResolvedValue([mockSchedule]);
 
       const result = await service.updateSchedule('group-123', updateDto);
 
-      expect(mockQueryRunner.manager.delete).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockManager.delete).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(result).toBeDefined();
     });
 
@@ -173,10 +167,9 @@ describe('ScheduleService', () => {
 
     it('should rollback on error', async () => {
       groupRepository.findOne.mockResolvedValue(mockGroup);
-      mockQueryRunner.manager.delete.mockRejectedValue(new Error('DB error'));
+      mockManager.delete.mockRejectedValue(new Error('DB error'));
 
       await expect(service.updateSchedule('group-123', updateDto)).rejects.toThrow();
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 

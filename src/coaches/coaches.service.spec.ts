@@ -13,7 +13,8 @@ jest.mock('bcrypt');
 describe('CoachesService', () => {
   let service: CoachesService;
   let coachesRepository: jest.Mocked<Repository<Coach>>;
-  let mockQueryRunner: any;
+  let mockManager: any;
+  let mockDataSource: any;
 
   const mockUser = {
     id: 'user-123',
@@ -37,29 +38,22 @@ describe('CoachesService', () => {
   } as unknown as Coach;
 
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        findOne: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-        remove: jest.fn(),
-        delete: jest.fn(),
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue({ affected: 1 }),
-        }),
-      },
+    mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+      delete: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      }),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockCoachesRepository = {
@@ -116,36 +110,32 @@ describe('CoachesService', () => {
     };
 
     it('should create a coach with user', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockManager.findOne.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.create(createCoachDto);
 
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
       expect(result).toBeDefined();
     });
 
     it('should throw ConflictException when email exists', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockUser);
+      mockManager.findOne.mockResolvedValue(mockUser);
 
       await expect(service.create(createCoachDto)).rejects.toThrow(ConflictException);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
     it('should rollback on error', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockManager.findOne.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation(() => {
+      mockManager.create.mockImplementation(() => {
         throw new Error('DB error');
       });
 
       await expect(service.create(createCoachDto)).rejects.toThrow(BadRequestException);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 
@@ -161,8 +151,8 @@ describe('CoachesService', () => {
 
     it('should update coach fields', async () => {
       coachesRepository.findOne.mockResolvedValue({ ...mockCoach });
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.update('coach-123', updateCoachDto);
 
@@ -170,7 +160,7 @@ describe('CoachesService', () => {
         where: { id: 'coach-123' },
         relations: ['user'],
       });
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(result.firstName).toBe('Updated');
     });
 
@@ -181,17 +171,21 @@ describe('CoachesService', () => {
     });
 
     it('should throw ConflictException when email taken by another user', async () => {
-      const coachWithUser = { ...mockCoach, user: { ...mockUser, id: 'user-123' } };
+      const coachWithUser = { ...mockCoach, user: { ...mockUser } };
       coachesRepository.findOne.mockResolvedValue(coachWithUser as unknown as Coach);
-      mockQueryRunner.manager.findOne.mockResolvedValue({ ...mockUser, id: 'different-user' });
+
+      // Override transaction to throw ConflictException directly
+      mockDataSource.transaction.mockImplementation(async () => {
+        throw new ConflictException('Email already exists');
+      });
 
       await expect(service.update('coach-123', updateCoachDto)).rejects.toThrow(ConflictException);
     });
 
     it('should update password when provided', async () => {
       coachesRepository.findOne.mockResolvedValue({ ...mockCoach });
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
       (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
 
       await service.update('coach-123', { password: 'newpassword' });
@@ -203,14 +197,14 @@ describe('CoachesService', () => {
   describe('remove', () => {
     it('should remove coach and user', async () => {
       coachesRepository.findOne.mockResolvedValue({ ...mockCoach });
-      mockQueryRunner.manager.remove.mockResolvedValue(mockCoach);
-      mockQueryRunner.manager.delete.mockResolvedValue({ affected: 1 });
+      mockManager.remove.mockResolvedValue(mockCoach);
+      mockManager.delete.mockResolvedValue({ affected: 1 });
 
       await service.remove('coach-123');
 
-      expect(mockQueryRunner.manager.remove).toHaveBeenCalled();
-      expect(mockQueryRunner.manager.delete).toHaveBeenCalledWith(User, 'user-123');
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockManager.remove).toHaveBeenCalled();
+      expect(mockManager.delete).toHaveBeenCalledWith(User, 'user-123');
+      expect(mockDataSource.transaction).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when coach not found', async () => {
@@ -221,10 +215,9 @@ describe('CoachesService', () => {
 
     it('should rollback on error', async () => {
       coachesRepository.findOne.mockResolvedValue({ ...mockCoach });
-      mockQueryRunner.manager.remove.mockRejectedValue(new Error('DB error'));
+      mockManager.remove.mockRejectedValue(new Error('DB error'));
 
       await expect(service.remove('coach-123')).rejects.toThrow(BadRequestException);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 });

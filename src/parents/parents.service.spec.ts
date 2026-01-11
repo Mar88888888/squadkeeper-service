@@ -15,7 +15,8 @@ describe('ParentsService', () => {
   let service: ParentsService;
   let parentsRepository: jest.Mocked<Repository<Parent>>;
   let playersRepository: jest.Mocked<Repository<Player>>;
-  let mockQueryRunner: any;
+  let mockManager: any;
+  let mockDataSource: any;
 
   const mockUser = {
     id: 'user-123',
@@ -42,30 +43,23 @@ describe('ParentsService', () => {
   } as unknown as Parent;
 
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        findOne: jest.fn(),
-        find: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-        remove: jest.fn(),
-        delete: jest.fn(),
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn().mockResolvedValue({ affected: 1 }),
-        }),
-      },
+    mockManager = {
+      findOne: jest.fn(),
+      find: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+      delete: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn().mockResolvedValue({ affected: 1 }),
+      }),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockParentsRepository = {
@@ -125,25 +119,22 @@ describe('ParentsService', () => {
     };
 
     it('should create a parent with user', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockManager.findOne.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.create(createParentDto);
 
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
       expect(result).toBeDefined();
     });
 
     it('should throw ConflictException when email exists', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockUser);
+      mockManager.findOne.mockResolvedValue(mockUser);
 
       await expect(service.create(createParentDto)).rejects.toThrow(ConflictException);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
     it('should create parent with children', async () => {
@@ -151,18 +142,18 @@ describe('ParentsService', () => {
         ...createParentDto,
         childrenIds: ['player-123', 'player-456'],
       };
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.find.mockResolvedValue([
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.find.mockResolvedValue([
         { id: 'player-123' },
         { id: 'player-456' },
       ]);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       await service.create(dtoWithChildren);
 
-      expect(mockQueryRunner.manager.find).toHaveBeenCalled();
+      expect(mockManager.find).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when some children not found', async () => {
@@ -170,11 +161,11 @@ describe('ParentsService', () => {
         ...createParentDto,
         childrenIds: ['player-123', 'player-456'],
       };
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.find.mockResolvedValue([{ id: 'player-123' }]);
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.find.mockResolvedValue([{ id: 'player-123' }]);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       await expect(service.create(dtoWithChildren)).rejects.toThrow(NotFoundException);
     });
@@ -189,17 +180,18 @@ describe('ParentsService', () => {
     };
 
     it('should update parent fields', async () => {
-      parentsRepository.findOne.mockResolvedValue({ ...mockParent });
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      const parentCopy = { ...mockParent, user: { ...mockUser } };
+      parentsRepository.findOne.mockResolvedValue(parentCopy as unknown as Parent);
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.update('parent-123', updateParentDto);
 
       expect(parentsRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'parent-123' },
-        relations: ['user'],
+        relations: ['user', 'children'],
       });
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(result.firstName).toBe('Updated');
     });
 
@@ -214,7 +206,7 @@ describe('ParentsService', () => {
     it('should throw ConflictException when email taken by another user', async () => {
       const parentWithUser = { ...mockParent, user: { ...mockUser, id: 'user-123' } };
       parentsRepository.findOne.mockResolvedValue(parentWithUser as unknown as Parent);
-      mockQueryRunner.manager.findOne.mockResolvedValue({ ...mockUser, id: 'different-user' });
+      mockManager.findOne.mockResolvedValue({ ...mockUser, id: 'different-user' });
 
       await expect(service.update('parent-123', updateParentDto)).rejects.toThrow(
         ConflictException,
@@ -222,9 +214,10 @@ describe('ParentsService', () => {
     });
 
     it('should update password when provided', async () => {
-      parentsRepository.findOne.mockResolvedValue({ ...mockParent });
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      const parentCopy = { ...mockParent, user: { ...mockUser } };
+      parentsRepository.findOne.mockResolvedValue(parentCopy as unknown as Parent);
+      mockManager.findOne.mockResolvedValue(null);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
       (bcrypt.hash as jest.Mock).mockResolvedValue('new-hashed-password');
 
       await service.update('parent-123', { password: 'newpassword' });
@@ -235,26 +228,26 @@ describe('ParentsService', () => {
 
   describe('remove', () => {
     it('should remove parent and user', async () => {
-      parentsRepository.findOne.mockResolvedValue({ ...mockParent, children: [] });
-      mockQueryRunner.manager.remove.mockResolvedValue(mockParent);
-      mockQueryRunner.manager.delete.mockResolvedValue({ affected: 1 });
+      parentsRepository.findOne.mockResolvedValue({ ...mockParent, children: [] } as unknown as Parent);
+      mockManager.remove.mockResolvedValue(mockParent);
+      mockManager.delete.mockResolvedValue({ affected: 1 });
 
       await service.remove('parent-123');
 
-      expect(mockQueryRunner.manager.remove).toHaveBeenCalled();
-      expect(mockQueryRunner.manager.delete).toHaveBeenCalledWith(User, 'user-123');
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockManager.remove).toHaveBeenCalled();
+      expect(mockManager.delete).toHaveBeenCalledWith(User, 'user-123');
+      expect(mockDataSource.transaction).toHaveBeenCalled();
     });
 
     it('should unlink children before removing', async () => {
       const parentWithChildren = { ...mockParent, children: [mockPlayer] };
       parentsRepository.findOne.mockResolvedValue(parentWithChildren as unknown as Parent);
-      mockQueryRunner.manager.remove.mockResolvedValue(mockParent);
-      mockQueryRunner.manager.delete.mockResolvedValue({ affected: 1 });
+      mockManager.remove.mockResolvedValue(mockParent);
+      mockManager.delete.mockResolvedValue({ affected: 1 });
 
       await service.remove('parent-123');
 
-      expect(mockQueryRunner.manager.createQueryBuilder).toHaveBeenCalled();
+      expect(mockManager.createQueryBuilder).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when parent not found', async () => {
@@ -263,21 +256,20 @@ describe('ParentsService', () => {
       await expect(service.remove('nonexistent')).rejects.toThrow(NotFoundException);
     });
 
-    it('should rollback on error', async () => {
-      parentsRepository.findOne.mockResolvedValue({ ...mockParent, children: [] });
-      mockQueryRunner.manager.remove.mockRejectedValue(new Error('DB error'));
+    it('should throw BadRequestException on error', async () => {
+      parentsRepository.findOne.mockResolvedValue({ ...mockParent, children: [] } as unknown as Parent);
+      mockDataSource.transaction.mockRejectedValue(new Error('DB error'));
 
       await expect(service.remove('parent-123')).rejects.toThrow(BadRequestException);
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 
   describe('linkChild', () => {
     it('should link a child to parent', async () => {
       parentsRepository.findOne
-        .mockResolvedValueOnce({ ...mockParent, children: [] })
-        .mockResolvedValueOnce({ ...mockParent, children: [mockPlayer] });
-      playersRepository.findOne.mockResolvedValue({ ...mockPlayer, parent: null });
+        .mockResolvedValueOnce({ ...mockParent, children: [] } as unknown as Parent)
+        .mockResolvedValueOnce({ ...mockParent, children: [mockPlayer] } as unknown as Parent);
+      playersRepository.findOne.mockResolvedValue({ ...mockPlayer, parent: null } as unknown as Player);
       playersRepository.save.mockResolvedValue(mockPlayer);
 
       const result = await service.linkChild('parent-123', 'player-123');
@@ -308,7 +300,7 @@ describe('ParentsService', () => {
       playersRepository.findOne.mockResolvedValue({
         ...mockPlayer,
         parent: { id: 'parent-123' },
-      });
+      } as unknown as Player);
 
       await expect(service.linkChild('parent-123', 'player-123')).rejects.toThrow(
         BadRequestException,
@@ -320,8 +312,8 @@ describe('ParentsService', () => {
     it('should unlink a child from parent', async () => {
       parentsRepository.findOne
         .mockResolvedValueOnce(mockParent)
-        .mockResolvedValueOnce({ ...mockParent, children: [] });
-      playersRepository.findOne.mockResolvedValue({ ...mockPlayer, parent: mockParent });
+        .mockResolvedValueOnce({ ...mockParent, children: [] } as unknown as Parent);
+      playersRepository.findOne.mockResolvedValue({ ...mockPlayer, parent: mockParent } as unknown as Player);
       playersRepository.save.mockResolvedValue(mockPlayer);
 
       const result = await service.unlinkChild('parent-123', 'player-123');

@@ -16,7 +16,8 @@ describe('EvaluationsService', () => {
   let evaluationsRepository: jest.Mocked<Repository<Evaluation>>;
   let trainingsRepository: jest.Mocked<Repository<Training>>;
   let matchesRepository: jest.Mocked<Repository<Match>>;
-  let mockQueryRunner: any;
+  let mockManager: any;
+  let mockDataSource: any;
 
   const mockPlayer = {
     id: 'player-123',
@@ -61,21 +62,14 @@ describe('EvaluationsService', () => {
   } as unknown as Evaluation;
 
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        findOne: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-      },
+    mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockEvaluationsRepository = {
@@ -130,7 +124,7 @@ describe('EvaluationsService', () => {
     };
 
     it('should create evaluations for training', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)        // Find training
         .mockResolvedValueOnce(mockCoach)           // Find coach
         .mockResolvedValueOnce(mockPlayer)          // Find player 1
@@ -140,14 +134,12 @@ describe('EvaluationsService', () => {
         .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 2
         .mockResolvedValueOnce(null);               // No existing evaluation for player 2
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.createBatch(createBatchDto, 'coach-user-id');
 
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(result).toHaveLength(2);
     });
 
@@ -157,15 +149,15 @@ describe('EvaluationsService', () => {
         records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
 
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockMatch)           // Find match
         .mockResolvedValueOnce(mockCoach)           // Find coach
         .mockResolvedValueOnce(mockPlayer)          // Find player
         .mockResolvedValueOnce(mockAttendance)      // Find attendance
         .mockResolvedValueOnce(null);               // No existing evaluation
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.createBatch(matchDto, 'coach-user-id');
 
@@ -195,12 +187,11 @@ describe('EvaluationsService', () => {
     });
 
     it('should throw NotFoundException when training not found', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValueOnce(null);
+      mockManager.findOne.mockResolvedValueOnce(null);
 
       await expect(service.createBatch(createBatchDto, 'coach-user-id')).rejects.toThrow(
         NotFoundException,
       );
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when match not found', async () => {
@@ -208,7 +199,7 @@ describe('EvaluationsService', () => {
         matchId: 'match-123',
         records: [{ playerId: 'player-123', technical: 7, tactical: 6, physical: 8, psychological: 7 }],
       };
-      mockQueryRunner.manager.findOne.mockResolvedValueOnce(null);
+      mockManager.findOne.mockResolvedValueOnce(null);
 
       await expect(service.createBatch(matchDto, 'coach-user-id')).rejects.toThrow(
         NotFoundException,
@@ -216,7 +207,7 @@ describe('EvaluationsService', () => {
     });
 
     it('should throw NotFoundException when coach not found', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(null);
 
@@ -226,7 +217,7 @@ describe('EvaluationsService', () => {
     });
 
     it('should throw NotFoundException when player not found', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)
         .mockResolvedValueOnce(mockCoach)
         .mockResolvedValueOnce(null);
@@ -237,7 +228,7 @@ describe('EvaluationsService', () => {
     });
 
     it('should update existing evaluation', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)        // Find training
         .mockResolvedValueOnce(mockCoach)           // Find coach
         .mockResolvedValueOnce(mockPlayer)          // Find player 1
@@ -247,8 +238,8 @@ describe('EvaluationsService', () => {
         .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 2
         .mockResolvedValueOnce(null);               // No existing evaluation for player 2
 
-      mockQueryRunner.manager.create.mockImplementation((_, data) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_, data) => data);
+      mockManager.save.mockImplementation((entity) => Promise.resolve(entity));
 
       const result = await service.createBatch(createBatchDto, 'coach-user-id');
 
@@ -256,21 +247,20 @@ describe('EvaluationsService', () => {
     });
 
     it('should rollback on error', async () => {
-      mockQueryRunner.manager.findOne
+      mockManager.findOne
         .mockResolvedValueOnce(mockTraining)        // Find training
         .mockResolvedValueOnce(mockCoach)           // Find coach
         .mockResolvedValueOnce(mockPlayer)          // Find player
         .mockResolvedValueOnce(mockAttendance)      // Find attendance
         .mockResolvedValueOnce(null);               // No existing evaluation
 
-      mockQueryRunner.manager.create.mockImplementation(() => {
+      mockManager.create.mockImplementation(() => {
         throw new Error('DB error');
       });
 
       await expect(service.createBatch(createBatchDto, 'coach-user-id')).rejects.toThrow(
         BadRequestException,
       );
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 

@@ -11,7 +11,7 @@ import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { MatchType } from './enums/match-type.enum';
-import { MatchTimeFilter } from './dto/filter-matches.dto';
+import { TimeFilter } from '../common/enums/time-filter.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 
@@ -177,7 +177,7 @@ describe('MatchesService', () => {
     it('should filter by UPCOMING time filter', async () => {
       matchesRepository.find.mockResolvedValue([mockMatch]);
 
-      await service.findAll({ timeFilter: MatchTimeFilter.UPCOMING });
+      await service.findAll({ timeFilter: TimeFilter.UPCOMING });
 
       expect(matchesRepository.find).toHaveBeenCalled();
     });
@@ -185,7 +185,7 @@ describe('MatchesService', () => {
     it('should filter by PAST time filter', async () => {
       matchesRepository.find.mockResolvedValue([mockMatch]);
 
-      await service.findAll({ timeFilter: MatchTimeFilter.PAST });
+      await service.findAll({ timeFilter: TimeFilter.PAST });
 
       expect(matchesRepository.find).toHaveBeenCalled();
     });
@@ -193,7 +193,7 @@ describe('MatchesService', () => {
     it('should filter by THIS_WEEK time filter', async () => {
       matchesRepository.find.mockResolvedValue([mockMatch]);
 
-      await service.findAll({ timeFilter: MatchTimeFilter.THIS_WEEK });
+      await service.findAll({ timeFilter: TimeFilter.THIS_WEEK });
 
       expect(matchesRepository.find).toHaveBeenCalled();
     });
@@ -201,7 +201,7 @@ describe('MatchesService', () => {
     it('should filter by NEXT_WEEK time filter', async () => {
       matchesRepository.find.mockResolvedValue([mockMatch]);
 
-      await service.findAll({ timeFilter: MatchTimeFilter.NEXT_WEEK });
+      await service.findAll({ timeFilter: TimeFilter.NEXT_WEEK });
 
       expect(matchesRepository.find).toHaveBeenCalled();
     });
@@ -209,7 +209,7 @@ describe('MatchesService', () => {
     it('should filter by THIS_MONTH time filter', async () => {
       matchesRepository.find.mockResolvedValue([mockMatch]);
 
-      await service.findAll({ timeFilter: MatchTimeFilter.THIS_MONTH });
+      await service.findAll({ timeFilter: TimeFilter.THIS_MONTH });
 
       expect(matchesRepository.find).toHaveBeenCalled();
     });

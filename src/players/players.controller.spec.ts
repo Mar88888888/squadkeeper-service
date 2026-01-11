@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PlayersController } from './players.controller';
 import { PlayersService } from './players.service';
-import { StatsPeriod } from './dto/player-stats.dto';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { Player } from './entities/player.entity';
 import { Position } from './enums/position.enum';
 import { StrongFoot } from './enums/strong-foot.enum';

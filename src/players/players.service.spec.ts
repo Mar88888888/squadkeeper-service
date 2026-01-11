@@ -11,7 +11,7 @@ import { Attendance } from '../attendance/entities/attendance.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Group } from '../groups/entities/group.entity';
 import { Parent } from '../parents/entities/parent.entity';
-import { StatsPeriod } from './dto/player-stats.dto';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 
 jest.mock('bcrypt');
@@ -24,7 +24,8 @@ describe('PlayersService', () => {
   let coachesRepository: jest.Mocked<Repository<Coach>>;
   let groupsRepository: jest.Mocked<Repository<Group>>;
   let parentsRepository: jest.Mocked<Repository<Parent>>;
-  let dataSource: jest.Mocked<DataSource>;
+  let mockManager: any;
+  let mockDataSource: any;
 
   const mockPlayer = {
     id: 'player-123',
@@ -62,32 +63,23 @@ describe('PlayersService', () => {
     getMany: jest.fn().mockResolvedValue([]),
   });
 
-  let mockQueryRunner: any;
-
   beforeEach(async () => {
-    mockQueryRunner = {
-      connect: jest.fn(),
-      startTransaction: jest.fn(),
-      commitTransaction: jest.fn(),
-      rollbackTransaction: jest.fn(),
-      release: jest.fn(),
-      manager: {
-        findOne: jest.fn(),
-        create: jest.fn(),
-        save: jest.fn(),
-        remove: jest.fn(),
-        delete: jest.fn(),
-        createQueryBuilder: jest.fn().mockReturnValue({
-          update: jest.fn().mockReturnThis(),
-          set: jest.fn().mockReturnThis(),
-          where: jest.fn().mockReturnThis(),
-          execute: jest.fn(),
-        }),
-      },
+    mockManager = {
+      findOne: jest.fn(),
+      create: jest.fn(),
+      save: jest.fn(),
+      remove: jest.fn(),
+      delete: jest.fn(),
+      createQueryBuilder: jest.fn().mockReturnValue({
+        update: jest.fn().mockReturnThis(),
+        set: jest.fn().mockReturnThis(),
+        where: jest.fn().mockReturnThis(),
+        execute: jest.fn(),
+      }),
     };
 
-    const mockDataSource = {
-      createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
+    mockDataSource = {
+      transaction: jest.fn().mockImplementation(async (cb) => cb(mockManager)),
     };
 
     const mockPlayersRepository = {
@@ -141,7 +133,6 @@ describe('PlayersService', () => {
     coachesRepository = module.get(getRepositoryToken(Coach));
     groupsRepository = module.get(getRepositoryToken(Group));
     parentsRepository = module.get(getRepositoryToken(Parent));
-    dataSource = module.get(DataSource);
   });
 
   afterEach(() => {
@@ -408,27 +399,23 @@ describe('PlayersService', () => {
     };
 
     it('should create a new player with user', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(null);
+      mockManager.findOne.mockResolvedValue(null);
       (bcrypt.hash as jest.Mock).mockResolvedValue('hashed-password');
-      mockQueryRunner.manager.create.mockImplementation((_: any, data: any) => data);
-      mockQueryRunner.manager.save.mockImplementation((entity: any) => Promise.resolve(entity));
+      mockManager.create.mockImplementation((_: any, data: any) => data);
+      mockManager.save.mockImplementation((entity: any) => Promise.resolve(entity));
 
       const result = await service.create(createPlayerDto);
 
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
       expect(bcrypt.hash).toHaveBeenCalledWith('password123', 10);
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.release).toHaveBeenCalled();
+      expect(result).toBeDefined();
     });
 
     it('should throw ConflictException when email already exists', async () => {
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockUser);
+      mockManager.findOne.mockResolvedValue(mockUser);
 
       await expect(service.create(createPlayerDto))
         .rejects.toThrow(ConflictException);
-
-      expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
     });
   });
 
@@ -436,6 +423,8 @@ describe('PlayersService', () => {
     it('should remove player and associated user', async () => {
       const playerWithUser = { ...mockPlayer, user: mockUser } as unknown as Player;
       playersRepository.findOne.mockResolvedValue(playerWithUser);
+      mockManager.remove.mockResolvedValue(playerWithUser);
+      mockManager.delete.mockResolvedValue({ affected: 1 });
 
       await service.remove('player-123');
 
@@ -443,10 +432,7 @@ describe('PlayersService', () => {
         where: { id: 'player-123' },
         relations: ['user'],
       });
-      expect(mockQueryRunner.connect).toHaveBeenCalled();
-      expect(mockQueryRunner.startTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-      expect(mockQueryRunner.release).toHaveBeenCalled();
+      expect(mockDataSource.transaction).toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when player not found', async () => {
