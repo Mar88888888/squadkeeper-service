@@ -16,7 +16,8 @@ import {
 import { PlayersService } from './players.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
-import { StatsPeriod, ChildrenStatsResponse } from './dto/player-stats.dto';
+import { ChildrenStatsResponse } from './dto/player-stats.dto';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';

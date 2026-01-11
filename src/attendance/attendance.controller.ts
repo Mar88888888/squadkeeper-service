@@ -57,12 +57,10 @@ export class AttendanceController {
   ) {
     const { id: userId, role } = req.user;
 
-    // Admins and coaches see all attendance
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.attendanceService.findByEvent(id, EventType.TRAINING);
     }
 
-    // Get the training to verify access
     const training = await this.trainingsRepository.findOne({
       where: { id },
       relations: ['group'],
@@ -71,7 +69,6 @@ export class AttendanceController {
       throw new ForbiddenException('Training not found');
     }
 
-    // Players only see their own attendance
     if (role === UserRole.PLAYER) {
       const player = await this.playersRepository.findOne({
         where: { user: { id: userId } },
@@ -83,7 +80,6 @@ export class AttendanceController {
       return this.attendanceService.findByEventForPlayers(id, EventType.TRAINING, [player.id]);
     }
 
-    // Parents see their children's attendance
     if (role === UserRole.PARENT) {
       const parent = await this.parentsRepository.findOne({
         where: { user: { id: userId } },
@@ -111,12 +107,10 @@ export class AttendanceController {
   ) {
     const { id: userId, role } = req.user;
 
-    // Admins and coaches see all attendance
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.attendanceService.findByEvent(id, EventType.MATCH);
     }
 
-    // Get the match to verify access
     const match = await this.matchesRepository.findOne({
       where: { id },
       relations: ['group'],
@@ -125,7 +119,6 @@ export class AttendanceController {
       throw new ForbiddenException('Match not found');
     }
 
-    // Players only see their own attendance
     if (role === UserRole.PLAYER) {
       const player = await this.playersRepository.findOne({
         where: { user: { id: userId } },
@@ -137,7 +130,6 @@ export class AttendanceController {
       return this.attendanceService.findByEventForPlayers(id, EventType.MATCH, [player.id]);
     }
 
-    // Parents see their children's attendance
     if (role === UserRole.PARENT) {
       const parent = await this.parentsRepository.findOne({
         where: { user: { id: userId } },
@@ -180,7 +172,6 @@ export class AttendanceController {
       if (!parent || !parent.children?.length) {
         throw new ForbiddenException('No children found');
       }
-      // Return per-child stats for parents
       return this.attendanceService.getStatsPerPlayer(parent.children);
     }
 

@@ -1,7 +1,7 @@
 export enum GameFormat {
-  FIVE_A_SIDE = '4+1', // 5 players (U-8, U-9)
-  NINE_A_SIDE = '8+1', // 9 players (U-10, U-11, U-12)
-  ELEVEN_A_SIDE = '10+1', // 11 players (U-13+)
+  FIVE_A_SIDE = '4+1',
+  NINE_A_SIDE = '8+1',
+  ELEVEN_A_SIDE = '10+1',
 }
 
 export const GAME_FORMAT_CONFIG = {

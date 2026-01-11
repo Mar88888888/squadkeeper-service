@@ -41,43 +41,36 @@ export class ParentsService {
       throw new NotFoundException('Parent not found');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      if (parent.children && parent.children.length > 0) {
-        await queryRunner.manager
-          .createQueryBuilder()
-          .update(Player)
-          .set({ parent: null })
-          .where('parentId = :parentId', { parentId: id })
-          .execute();
-      }
+      await this.dataSource.transaction(async (manager) => {
+        if (parent.children && parent.children.length > 0) {
+          await manager
+            .createQueryBuilder()
+            .update(Player)
+            .set({ parent: null })
+            .where('parentId = :parentId', { parentId: id })
+            .execute();
+        }
 
-      const userId = parent.user?.id;
+        const userId = parent.user?.id;
 
-      if (userId) {
-        await queryRunner.manager
-          .createQueryBuilder()
-          .update(User)
-          .set({ parent: null as unknown as Parent })
-          .where('id = :userId', { userId })
-          .execute();
-      }
+        if (userId) {
+          await manager
+            .createQueryBuilder()
+            .update(User)
+            .set({ parent: null as unknown as Parent })
+            .where('id = :userId', { userId })
+            .execute();
+        }
 
-      await queryRunner.manager.remove(parent);
+        await manager.remove(parent);
 
-      if (userId) {
-        await queryRunner.manager.delete(User, userId);
-      }
-
-      await queryRunner.commitTransaction();
+        if (userId) {
+          await manager.delete(User, userId);
+        }
+      });
     } catch {
-      await queryRunner.rollbackTransaction();
       throw new BadRequestException('Failed to delete parent');
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -142,68 +135,63 @@ export class ParentsService {
   }
 
   async create(createParentDto: CreateParentDto): Promise<Parent> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const existingUser = await queryRunner.manager.findOne(User, {
-        where: { email: createParentDto.email },
-      });
-
-      if (existingUser) {
-        throw new ConflictException('Email already exists');
-      }
-
-      const hashedPassword = await bcrypt.hash(createParentDto.password, 10);
-
-      const user = queryRunner.manager.create(User, {
-        email: createParentDto.email,
-        passwordHash: hashedPassword,
-        role: UserRole.PARENT,
-        firstName: createParentDto.firstName,
-        lastName: createParentDto.lastName,
-      });
-
-      await queryRunner.manager.save(user);
-
-      const parent = queryRunner.manager.create(Parent, {
-        firstName: createParentDto.firstName,
-        lastName: createParentDto.lastName,
-        phoneNumber: createParentDto.phoneNumber,
-        user,
-      });
-
-      await queryRunner.manager.save(parent);
-
-      user.parent = parent;
-      await queryRunner.manager.save(user);
-
-      if (
-        createParentDto.childrenIds &&
-        createParentDto.childrenIds.length > 0
-      ) {
-        const players = await queryRunner.manager.find(Player, {
-          where: { id: In(createParentDto.childrenIds) },
+      return await this.dataSource.transaction(async (manager) => {
+        const existingUser = await manager.findOne(User, {
+          where: { email: createParentDto.email },
         });
 
-        if (players.length !== createParentDto.childrenIds.length) {
-          throw new NotFoundException('One or more players not found');
+        if (existingUser) {
+          throw new ConflictException('Email already exists');
         }
 
-        await queryRunner.manager
-          .createQueryBuilder()
-          .update(Player)
-          .set({ parent })
-          .where('id IN (:...ids)', { ids: createParentDto.childrenIds })
-          .execute();
-      }
+        const hashedPassword = await bcrypt.hash(createParentDto.password, 10);
 
-      await queryRunner.commitTransaction();
+        const user = manager.create(User, {
+          email: createParentDto.email,
+          passwordHash: hashedPassword,
+          role: UserRole.PARENT,
+          firstName: createParentDto.firstName,
+          lastName: createParentDto.lastName,
+        });
 
-      return parent;
+        await manager.save(user);
+
+        const parent = manager.create(Parent, {
+          firstName: createParentDto.firstName,
+          lastName: createParentDto.lastName,
+          phoneNumber: createParentDto.phoneNumber,
+          user,
+        });
+
+        await manager.save(parent);
+
+        user.parent = parent;
+        await manager.save(user);
+
+        if (
+          createParentDto.childrenIds &&
+          createParentDto.childrenIds.length > 0
+        ) {
+          const players = await manager.find(Player, {
+            where: { id: In(createParentDto.childrenIds) },
+          });
+
+          if (players.length !== createParentDto.childrenIds.length) {
+            throw new NotFoundException('One or more players not found');
+          }
+
+          await manager
+            .createQueryBuilder()
+            .update(Player)
+            .set({ parent })
+            .where('id IN (:...ids)', { ids: createParentDto.childrenIds })
+            .execute();
+        }
+
+        return parent;
+      });
     } catch (error) {
-      await queryRunner.rollbackTransaction();
       if (
         error instanceof ConflictException ||
         error instanceof NotFoundException
@@ -211,79 +199,52 @@ export class ParentsService {
         throw error;
       }
       throw new BadRequestException('Failed to create parent');
-    } finally {
-      await queryRunner.release();
     }
   }
 
   async update(id: string, updateParentDto: UpdateParentDto): Promise<Parent> {
     const parent = await this.parentsRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'children'],
     });
 
     if (!parent) {
       throw new NotFoundException('Parent not found');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      if (parent.user) {
-        if (updateParentDto.email !== undefined) {
-          const existingUser = await queryRunner.manager.findOne(User, {
-            where: { email: updateParentDto.email },
-          });
-          if (existingUser && existingUser.id !== parent.user.id) {
-            throw new ConflictException('Email already exists');
+      return await this.dataSource.transaction(async (manager) => {
+        const { email, password, firstName, lastName } = updateParentDto;
+
+        if (parent.user) {
+          if (email !== undefined && email !== parent.user.email) {
+            const existingUser = await manager.findOne(User, { where: { email } });
+            if (existingUser) {
+              throw new ConflictException('Email already exists');
+            }
+            parent.user.email = email;
           }
-          parent.user.email = updateParentDto.email;
+
+          if (password !== undefined) {
+            parent.user.passwordHash = await bcrypt.hash(password, 10);
+          }
+          if (firstName !== undefined) parent.user.firstName = firstName;
+          if (lastName !== undefined) parent.user.lastName = lastName;
+
+          await manager.save(parent.user);
         }
 
-        if (updateParentDto.password !== undefined) {
-          parent.user.passwordHash = await bcrypt.hash(
-            updateParentDto.password,
-            10,
-          );
-        }
+        if (firstName !== undefined) parent.firstName = firstName;
+        if (lastName !== undefined) parent.lastName = lastName;
+        if (updateParentDto.phoneNumber !== undefined) parent.phoneNumber = updateParentDto.phoneNumber;
 
-        if (updateParentDto.firstName !== undefined) {
-          parent.user.firstName = updateParentDto.firstName;
-        }
+        await manager.save(parent);
 
-        if (updateParentDto.lastName !== undefined) {
-          parent.user.lastName = updateParentDto.lastName;
-        }
-
-        await queryRunner.manager.save(parent.user);
-      }
-
-      if (updateParentDto.firstName !== undefined) {
-        parent.firstName = updateParentDto.firstName;
-      }
-
-      if (updateParentDto.lastName !== undefined) {
-        parent.lastName = updateParentDto.lastName;
-      }
-
-      if (updateParentDto.phoneNumber !== undefined) {
-        parent.phoneNumber = updateParentDto.phoneNumber;
-      }
-
-      await queryRunner.manager.save(parent);
-      await queryRunner.commitTransaction();
-
-      return parent;
+        return parent;
+      });
     } catch (error) {
-      await queryRunner.rollbackTransaction();
-      if (error instanceof ConflictException) {
-        throw error;
-      }
+      if (error instanceof ConflictException) throw error;
       throw new BadRequestException('Failed to update parent');
-    } finally {
-      await queryRunner.release();
     }
   }
 }

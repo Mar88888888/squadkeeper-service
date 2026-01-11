@@ -9,9 +9,11 @@ import { Group } from '../groups/entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
 import { MatchType } from './enums/match-type.enum';
 import { MatchTimeFilter } from './dto/filter-matches.dto';
 import { UserRole } from '../users/enums/user-role.enum';
+import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 
 describe('MatchesService', () => {
   let service: MatchesService;
@@ -21,6 +23,7 @@ describe('MatchesService', () => {
   let coachesRepository: jest.Mocked<Repository<Coach>>;
   let playersRepository: jest.Mocked<Repository<Player>>;
   let parentsRepository: jest.Mocked<Repository<Parent>>;
+  let attendanceRepository: jest.Mocked<Repository<Attendance>>;
 
   const mockGroup = {
     id: 'group-123',
@@ -88,6 +91,10 @@ describe('MatchesService', () => {
       findOne: jest.fn(),
     };
 
+    const mockAttendanceRepository = {
+      findOne: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MatchesService,
@@ -97,6 +104,7 @@ describe('MatchesService', () => {
         { provide: getRepositoryToken(Coach), useValue: mockCoachesRepository },
         { provide: getRepositoryToken(Player), useValue: mockPlayersRepository },
         { provide: getRepositoryToken(Parent), useValue: mockParentsRepository },
+        { provide: getRepositoryToken(Attendance), useValue: mockAttendanceRepository },
       ],
     }).compile();
 
@@ -107,6 +115,7 @@ describe('MatchesService', () => {
     coachesRepository = module.get(getRepositoryToken(Coach));
     playersRepository = module.get(getRepositoryToken(Player));
     parentsRepository = module.get(getRepositoryToken(Parent));
+    attendanceRepository = module.get(getRepositoryToken(Attendance));
   });
 
   afterEach(() => {
@@ -343,6 +352,7 @@ describe('MatchesService', () => {
       };
       matchesRepository.findOne.mockResolvedValue(matchWithScore as unknown as Match);
       playersRepository.findOne.mockResolvedValue(mockPlayer);
+      attendanceRepository.findOne.mockResolvedValue({ status: AttendanceStatus.PRESENT } as unknown as Attendance);
       goalsRepository.create.mockReturnValue({ id: 'goal-123' } as unknown as Goal);
       goalsRepository.save.mockResolvedValue({ id: 'goal-123' } as unknown as Goal);
 
@@ -390,6 +400,7 @@ describe('MatchesService', () => {
       };
       matchesRepository.findOne.mockResolvedValue(matchWithMaxGoals as unknown as Match);
       playersRepository.findOne.mockResolvedValue(mockPlayer);
+      attendanceRepository.findOne.mockResolvedValue({ status: AttendanceStatus.PRESENT } as unknown as Attendance);
 
       await expect(
         service.addGoal('match-123', { scorerId: 'player-123' }),

@@ -77,7 +77,6 @@ export class MatchesController {
     return this.matchesService.findByGroup(groupId);
   }
 
-  // Goals endpoints
   @Get(':id/goals')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   getGoals(@Param('id') matchId: string) {

@@ -44,7 +44,6 @@ export class SquadsService {
       );
     }
 
-    // Verify coach has access to this group
     if (user.role === UserRole.COACH) {
       const hasAccess = await this.coachHasAccessToGroup(
         user.userId,
@@ -57,7 +56,6 @@ export class SquadsService {
       }
     }
 
-    // Get coach entity if user is a coach
     let createdBy: Coach | null = null;
     if (user.role === UserRole.COACH) {
       createdBy = await this.coachesRepository.findOne({
@@ -74,7 +72,6 @@ export class SquadsService {
 
     const savedSquad = await this.squadsRepository.save(squad);
 
-    // Create positions if provided
     if (createSquadDto.positions && createSquadDto.positions.length > 0) {
       const positions = await this.createPositions(
         savedSquad,
@@ -127,10 +124,8 @@ export class SquadsService {
   ): Promise<Squad> {
     const squad = await this.findOne(id);
 
-    // Delete existing positions
     await this.positionsRepository.delete({ squad: { id } });
 
-    // Create new positions
     const positions = await this.createPositions(
       squad,
       updatePositionsDto.positions,
@@ -152,7 +147,6 @@ export class SquadsService {
 
     const savedSquad = await this.squadsRepository.save(newSquad);
 
-    // Duplicate positions
     if (original.positions && original.positions.length > 0) {
       const positionsData = original.positions.map((pos) => ({
         playerId: pos.player?.id || null,

@@ -16,7 +16,7 @@ export class ScheduleItemDto {
   @IsInt()
   @Min(0)
   @Max(6)
-  dayOfWeek: number; // 0 (Sunday) - 6 (Saturday)
+  dayOfWeek: number;
 
   @IsString()
   @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
@@ -44,10 +44,10 @@ export class UpdateScheduleDto {
 
 export class GenerateTrainingsDto {
   @IsDateString()
-  fromDate: string; // "YYYY-MM-DD"
+  fromDate: string;
 
   @IsDateString()
-  toDate: string; // "YYYY-MM-DD"
+  toDate: string;
 
   @IsOptional()
   @IsString()

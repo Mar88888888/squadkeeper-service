@@ -37,19 +37,16 @@ export class ContactsService {
   ) {}
 
   async getContacts(userId: string, userRole: UserRole): Promise<ContactsResponse> {
-    // Get all coaches with their groups
     const coaches = await this.coachesRepository.find({
       relations: ['user', 'headGroups', 'assistantGroups'],
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
 
-    // Get all admins
     const admins = await this.usersRepository.find({
       where: { role: UserRole.ADMIN },
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
 
-    // Determine "my coaches" based on user role
     const myCoachIds = await this.getMyCoachIds(userId, userRole);
 
     const coachContacts: ContactInfo[] = coaches.map((coach) => ({
@@ -108,7 +105,6 @@ export class ContactsService {
     }
 
     if (userRole === UserRole.PARENT) {
-      // Find parent's children and get coaches of their groups using QueryBuilder
       const parent = await this.parentsRepository
         .createQueryBuilder('parent')
         .innerJoin('parent.user', 'user')
@@ -136,7 +132,6 @@ export class ContactsService {
       return Array.from(coachIds);
     }
 
-    // For coaches and admins, return empty (they see all)
     return [];
   }
 }

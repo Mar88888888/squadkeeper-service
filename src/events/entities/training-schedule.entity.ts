@@ -5,13 +5,13 @@ import { Group } from '../../groups/entities/group.entity';
 @Entity('training_schedules')
 export class TrainingSchedule extends BaseEntity {
   @Column({ type: 'int' })
-  dayOfWeek: number; // 0 (Sunday) - 6 (Saturday)
+  dayOfWeek: number;
 
   @Column({ type: 'time' })
-  startTime: string; // "HH:mm"
+  startTime: string;
 
   @Column({ type: 'time' })
-  endTime: string; // "HH:mm"
+  endTime: string;
 
   @Column()
   location: string;

@@ -1,5 +1,5 @@
 import { Position } from '../../players/enums/position.enum';
-import { StatsPeriod } from '../../players/dto/player-stats.dto';
+import { StatsPeriod } from '../../common/enums/stats-period.enum';
 
 export interface PlayerInfo {
   id: string;

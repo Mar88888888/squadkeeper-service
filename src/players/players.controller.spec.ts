@@ -2,8 +2,9 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { PlayersController } from './players.controller';
 import { PlayersService } from './players.service';
 import { StatsPeriod } from './dto/player-stats.dto';
-import { UserRole } from '../users/enums/user-role.enum';
 import { Player } from './entities/player.entity';
+import { Position } from './enums/position.enum';
+import { StrongFoot } from './enums/strong-foot.enum';
 
 describe('PlayersController', () => {
   let controller: PlayersController;
@@ -29,7 +30,7 @@ describe('PlayersController', () => {
       create: jest.fn(),
       update: jest.fn(),
       remove: jest.fn(),
-      getMyStats: jest.fn(),
+      findPlayerByUserId: jest.fn(),
       getTeamStats: jest.fn(),
       getChildrenStats: jest.fn(),
       getPlayerStats: jest.fn(),
@@ -67,6 +68,10 @@ describe('PlayersController', () => {
         firstName: 'John',
         lastName: 'Doe',
         dateOfBirth: '2010-01-01',
+        position: Position.ST,
+        height: 165,
+        weight: 55,
+        strongFoot: StrongFoot.RIGHT,
       };
       playersService.create.mockResolvedValue(mockPlayer);
 
@@ -85,7 +90,10 @@ describe('PlayersController', () => {
 
       const result = await controller.update('player-123', updateDto);
 
-      expect(playersService.update).toHaveBeenCalledWith('player-123', updateDto);
+      expect(playersService.update).toHaveBeenCalledWith(
+        'player-123',
+        updateDto,
+      );
       expect(result.firstName).toBe('Updated');
     });
   });
@@ -103,21 +111,31 @@ describe('PlayersController', () => {
   describe('getMyStats', () => {
     it('should return player stats with default period', async () => {
       const req = { user: { id: 'user-123' } };
-      playersService.getMyStats.mockResolvedValue(mockStats as any);
+      playersService.findPlayerByUserId.mockResolvedValue(mockPlayer);
+      playersService.getPlayerStats.mockResolvedValue(mockStats as any);
 
       const result = await controller.getMyStats(req);
 
-      expect(playersService.getMyStats).toHaveBeenCalledWith('user-123', StatsPeriod.ALL_TIME);
+      expect(playersService.findPlayerByUserId).toHaveBeenCalledWith('user-123');
+      expect(playersService.getPlayerStats).toHaveBeenCalledWith(
+        'player-123',
+        StatsPeriod.ALL_TIME,
+      );
       expect(result).toEqual(mockStats);
     });
 
     it('should return player stats with specified period', async () => {
       const req = { user: { id: 'user-123' } };
-      playersService.getMyStats.mockResolvedValue(mockStats as any);
+      playersService.findPlayerByUserId.mockResolvedValue(mockPlayer);
+      playersService.getPlayerStats.mockResolvedValue(mockStats as any);
 
-      await controller.getMyStats(req, StatsPeriod.LAST_MONTH);
+      await controller.getMyStats(req, StatsPeriod.THIS_MONTH);
 
-      expect(playersService.getMyStats).toHaveBeenCalled();
+      expect(playersService.findPlayerByUserId).toHaveBeenCalledWith('user-123');
+      expect(playersService.getPlayerStats).toHaveBeenCalledWith(
+        'player-123',
+        StatsPeriod.THIS_MONTH,
+      );
     });
   });
 
@@ -128,16 +146,22 @@ describe('PlayersController', () => {
 
       const result = await controller.getTeamStats(req);
 
-      expect(playersService.getTeamStats).toHaveBeenCalledWith('coach-123', StatsPeriod.ALL_TIME);
+      expect(playersService.getTeamStats).toHaveBeenCalledWith(
+        'coach-123',
+        StatsPeriod.ALL_TIME,
+      );
     });
 
     it('should return team stats with specified period', async () => {
       const req = { user: { id: 'coach-123' } };
       playersService.getTeamStats.mockResolvedValue([mockStats] as any);
 
-      await controller.getTeamStats(req, StatsPeriod.LAST_WEEK);
+      await controller.getTeamStats(req, StatsPeriod.THIS_SEASON);
 
-      expect(playersService.getTeamStats).toHaveBeenCalled();
+      expect(playersService.getTeamStats).toHaveBeenCalledWith(
+        'coach-123',
+        StatsPeriod.THIS_SEASON,
+      );
     });
   });
 
@@ -158,14 +182,20 @@ describe('PlayersController', () => {
 
     it('should return stats for specific child', async () => {
       const req = { user: { id: 'parent-123' } };
-      playersService.getChildrenStats.mockResolvedValue({ children: [mockStats] } as any);
+      playersService.getChildrenStats.mockResolvedValue({
+        children: [mockStats],
+      } as any);
 
-      await controller.getChildrenStats(req, 'child-123', StatsPeriod.LAST_MONTH);
+      await controller.getChildrenStats(
+        req,
+        'child-123',
+        StatsPeriod.THIS_MONTH,
+      );
 
       expect(playersService.getChildrenStats).toHaveBeenCalledWith(
         'parent-123',
         'child-123',
-        expect.any(String),
+        StatsPeriod.THIS_MONTH,
       );
     });
   });
@@ -176,17 +206,20 @@ describe('PlayersController', () => {
 
       const result = await controller.getPlayerStats('player-123');
 
-      expect(playersService.getPlayerStats).toHaveBeenCalledWith('player-123', StatsPeriod.ALL_TIME);
+      expect(playersService.getPlayerStats).toHaveBeenCalledWith(
+        'player-123',
+        StatsPeriod.ALL_TIME,
+      );
     });
 
     it('should return stats with specified period', async () => {
       playersService.getPlayerStats.mockResolvedValue(mockStats as any);
 
-      await controller.getPlayerStats('player-123', StatsPeriod.LAST_MONTH);
+      await controller.getPlayerStats('player-123', StatsPeriod.THIS_MONTH);
 
       expect(playersService.getPlayerStats).toHaveBeenCalledWith(
         'player-123',
-        expect.any(String),
+        StatsPeriod.THIS_MONTH,
       );
     });
   });

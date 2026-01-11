@@ -26,7 +26,6 @@ export class GroupsService {
   async create(createGroupDto: CreateGroupDto): Promise<Group> {
     const group = this.groupsRepository.create(createGroupDto);
 
-    // Handle head coach assignment
     if (createGroupDto.headCoachId) {
       const headCoach = await this.coachesRepository.findOne({
         where: { id: createGroupDto.headCoachId },
@@ -214,7 +213,6 @@ export class GroupsService {
   }
 
   async addPlayers(groupId: string, playerIds: string[]): Promise<Group> {
-    // Check if group exists
     const group = await this.groupsRepository.findOne({
       where: { id: groupId },
     });
@@ -222,7 +220,6 @@ export class GroupsService {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }
 
-    // Check if all players exist
     const players = await this.playersRepository.find({
       where: { id: In(playerIds) },
     });
@@ -235,20 +232,17 @@ export class GroupsService {
       );
     }
 
-    // Update players directly for better performance
     await this.playersRepository.update(
       { id: In(playerIds) },
       { group: { id: groupId } },
     );
 
-    // Return the updated group with relations
     const updatedGroup = await this.groupsRepository.findOne({
       where: { id: groupId },
       relations: ['headCoach', 'assistants', 'players'],
     });
 
     if (!updatedGroup) {
-      // This should not happen since we just verified the group exists
       throw new NotFoundException(
         `Group with ID ${groupId} not found after update`,
       );
@@ -260,7 +254,6 @@ export class GroupsService {
   async removePlayers(groupId: string, playerIds: string[]): Promise<Group> {
     const group = await this.findOne(groupId);
 
-    // Update players to remove them from the group
     await this.playersRepository
       .createQueryBuilder()
       .update(Player)
@@ -269,12 +262,10 @@ export class GroupsService {
       .andWhere('groupId = :groupId', { groupId })
       .execute();
 
-    // Return the updated group with relations
     return await this.findOne(groupId);
   }
 
   async remove(id: string): Promise<void> {
-    // First unassign all players from this group
     await this.playersRepository
       .createQueryBuilder()
       .update(Player)

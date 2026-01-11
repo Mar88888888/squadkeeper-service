@@ -24,8 +24,6 @@ describe('JwtAuthGuard', () => {
         }),
       } as unknown as ExecutionContext;
 
-      // The actual JWT validation is handled by passport
-      // We just verify the guard exists and can be instantiated
       expect(guard).toBeDefined();
     });
   });

@@ -36,43 +36,28 @@ export class ScheduleService {
   ): Promise<TrainingSchedule[]> {
     const group = await this.validateGroup(groupId);
 
-    // Validate each item
     for (const item of dto.items) {
       if (item.endTime <= item.startTime) {
         throw new BadRequestException('End time must be after start time');
       }
     }
 
-    // Check for duplicate days
     const days = dto.items.map((i) => i.dayOfWeek);
     if (new Set(days).size !== days.length) {
       throw new BadRequestException('Duplicate days in schedule');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
-    try {
-      // Delete existing schedule items
-      await queryRunner.manager.delete(TrainingSchedule, {
+    return this.dataSource.transaction(async (manager) => {
+      await manager.delete(TrainingSchedule, {
         group: { id: groupId },
       });
 
-      // Create new schedule items
       const schedules = dto.items.map((item) =>
-        queryRunner.manager.create(TrainingSchedule, { ...item, group }),
+        manager.create(TrainingSchedule, { ...item, group }),
       );
 
-      const saved = await queryRunner.manager.save(schedules);
-      await queryRunner.commitTransaction();
-      return saved;
-    } catch (error) {
-      await queryRunner.rollbackTransaction();
-      throw error;
-    } finally {
-      await queryRunner.release();
-    }
+      return manager.save(schedules);
+    });
   }
 
   async generateTrainings(
@@ -92,7 +77,6 @@ export class ScheduleService {
       throw new BadRequestException('toDate must be after fromDate');
     }
 
-    // Get existing trainings in date range to avoid duplicates
     const existingTrainings = await this.trainingRepository
       .createQueryBuilder('t')
       .where('t.groupId = :groupId', { groupId })
@@ -111,13 +95,11 @@ export class ScheduleService {
     const trainingsToCreate: Partial<Training>[] = [];
     let skipped = 0;
 
-    // Create schedule map by dayOfWeek for quick lookup
     const scheduleMap = new Map<number, TrainingSchedule>();
     for (const item of schedule) {
       scheduleMap.set(item.dayOfWeek, item);
     }
 
-    // Iterate through each day in range
     const currentDate = new Date(fromDate);
     while (currentDate <= toDate) {
       const dayOfWeek = currentDate.getDay();
@@ -129,7 +111,6 @@ export class ScheduleService {
         if (existingDates.has(dateStr)) {
           skipped++;
         } else {
-          // Create training for this day
           const [startHour, startMin] = scheduleItem.startTime
             .split(':')
             .map(Number);
@@ -155,7 +136,6 @@ export class ScheduleService {
       currentDate.setDate(currentDate.getDate() + 1);
     }
 
-    // Bulk insert trainings
     if (trainingsToCreate.length > 0) {
       await this.trainingRepository.save(trainingsToCreate);
     }
@@ -172,7 +152,6 @@ export class ScheduleService {
     await this.validateGroup(groupId);
     const now = new Date();
 
-    // Find future trainings that were generated from schedule
     const futureTrainings = await this.trainingRepository.find({
       where: {
         group: { id: groupId },

@@ -5,14 +5,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  Repository,
-  In,
-  Between,
-  LessThanOrEqual,
-  MoreThanOrEqual,
-  FindOptionsWhere,
-} from 'typeorm';
+import { Repository, In, FindOptionsWhere } from 'typeorm';
 import { Match } from './entities/match.entity';
 import { Goal } from './entities/goal.entity';
 import { Group } from '../groups/entities/group.entity';
@@ -23,12 +16,12 @@ import { Attendance } from '../attendance/entities/attendance.entity';
 import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchResultDto } from './dto/update-match-result.dto';
-import { FilterMatchesDto, MatchTimeFilter } from './dto/filter-matches.dto';
+import { FilterMatchesDto } from './dto/filter-matches.dto';
 import { AddGoalDto } from './dto/add-goal.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MatchType } from './enums/match-type.enum';
+import { buildDateFilter } from '../common/utils/date-filter.util';
 
-// Attendance statuses that allow goal/assist recording
 const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
 @Injectable()
@@ -70,77 +63,7 @@ export class MatchesService {
     }
   }
 
-  private buildDateFilter(
-    filters: FilterMatchesDto,
-  ): FindOptionsWhere<Match> | undefined {
-    const now = new Date();
-
-    if (filters.timeFilter && filters.timeFilter !== MatchTimeFilter.ALL) {
-      switch (filters.timeFilter) {
-        case MatchTimeFilter.UPCOMING:
-          return { startTime: MoreThanOrEqual(now) };
-
-        case MatchTimeFilter.PAST:
-          return { startTime: LessThanOrEqual(now) };
-
-        case MatchTimeFilter.THIS_WEEK: {
-          const startOfWeek = new Date(now);
-          startOfWeek.setDate(now.getDate() - now.getDay() + 1);
-          startOfWeek.setHours(0, 0, 0, 0);
-          const endOfWeek = new Date(startOfWeek);
-          endOfWeek.setDate(startOfWeek.getDate() + 6);
-          endOfWeek.setHours(23, 59, 59, 999);
-          return { startTime: Between(startOfWeek, endOfWeek) };
-        }
-
-        case MatchTimeFilter.NEXT_WEEK: {
-          const startOfNextWeek = new Date(now);
-          startOfNextWeek.setDate(now.getDate() - now.getDay() + 8);
-          startOfNextWeek.setHours(0, 0, 0, 0);
-          const endOfNextWeek = new Date(startOfNextWeek);
-          endOfNextWeek.setDate(startOfNextWeek.getDate() + 6);
-          endOfNextWeek.setHours(23, 59, 59, 999);
-          return { startTime: Between(startOfNextWeek, endOfNextWeek) };
-        }
-
-        case MatchTimeFilter.THIS_MONTH: {
-          const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-          const endOfMonth = new Date(
-            now.getFullYear(),
-            now.getMonth() + 1,
-            0,
-            23,
-            59,
-            59,
-            999,
-          );
-          return { startTime: Between(startOfMonth, endOfMonth) };
-        }
-      }
-    }
-
-    if (filters.dateFrom && filters.dateTo) {
-      return {
-        startTime: Between(
-          new Date(filters.dateFrom),
-          new Date(filters.dateTo + 'T23:59:59.999Z'),
-        ),
-      };
-    }
-    if (filters.dateFrom) {
-      return { startTime: MoreThanOrEqual(new Date(filters.dateFrom)) };
-    }
-    if (filters.dateTo) {
-      return {
-        startTime: LessThanOrEqual(new Date(filters.dateTo + 'T23:59:59.999Z')),
-      };
-    }
-
-    return undefined;
-  }
-
   async create(createMatchDto: CreateMatchDto): Promise<Match> {
-    // Check if group exists
     const group = await this.groupsRepository.findOne({
       where: { id: createMatchDto.groupId },
     });
@@ -151,7 +74,6 @@ export class MatchesService {
       );
     }
 
-    // Validate endTime > startTime
     if (createMatchDto.endTime <= createMatchDto.startTime) {
       throw new BadRequestException('endTime must be after startTime');
     }
@@ -180,16 +102,13 @@ export class MatchesService {
       throw new NotFoundException(`Match with id ${id} not found`);
     }
 
-    // If goals are already recorded, validate new score doesn't go below recorded goals
     if (match.goals && match.goals.length > 0) {
       const existingRegularGoals = match.goals.filter((g) => !g.isOwnGoal).length;
       const existingOwnGoals = match.goals.filter((g) => g.isOwnGoal).length;
 
-      // Our goals = where regular goals are recorded
       const newOurGoals = match.isHome
         ? updateMatchResultDto.homeGoals
         : updateMatchResultDto.awayGoals;
-      // Conceded goals = where own goals count
       const newConcededGoals = match.isHome
         ? updateMatchResultDto.awayGoals
         : updateMatchResultDto.homeGoals;
@@ -214,7 +133,7 @@ export class MatchesService {
   }
 
   async findAll(filters: FilterMatchesDto = {}): Promise<Match[]> {
-    const dateFilter = this.buildDateFilter(filters);
+    const dateFilter = buildDateFilter(filters);
 
     return await this.matchesRepository.find({
       where: dateFilter,
@@ -273,7 +192,7 @@ export class MatchesService {
       return [];
     }
 
-    const dateFilter = this.buildDateFilter(filters);
+    const dateFilter = buildDateFilter(filters);
     const whereCondition: FindOptionsWhere<Match> = {
       group: { id: In(groupIds) },
       ...dateFilter,
@@ -337,34 +256,28 @@ export class MatchesService {
       throw new NotFoundException(`Match with id ${matchId} not found`);
     }
 
-    // Validate that match score is set before adding goals
     if (match.homeGoals === null || match.awayGoals === null) {
       throw new BadRequestException(
         'Cannot add goals before match result is set',
       );
     }
 
-    // Calculate our goals and conceded goals based on home/away
     const ourGoals = match.isHome ? match.homeGoals : match.awayGoals;
     const concededGoals = match.isHome ? match.awayGoals : match.homeGoals;
 
-    // Count existing goals
     const existingGoals = match.goals || [];
     const existingRegularGoals = existingGoals.filter((g) => !g.isOwnGoal).length;
     const existingOwnGoals = existingGoals.filter((g) => g.isOwnGoal).length;
 
-    // Validate goal limits
     const isOwnGoal = addGoalDto.isOwnGoal || false;
 
     if (isOwnGoal) {
-      // Own goals count towards opponent's score (our conceded goals)
       if (existingOwnGoals >= concededGoals) {
         throw new BadRequestException(
           `Cannot add more own goals. Own goals (${existingOwnGoals}) already match conceded goals (${concededGoals})`,
         );
       }
     } else {
-      // Regular goals count towards our score
       if (existingRegularGoals >= ourGoals) {
         throw new BadRequestException(
           `Cannot add more goals. Recorded goals (${existingRegularGoals}) already match team score (${ourGoals})`,
@@ -380,7 +293,6 @@ export class MatchesService {
       throw new NotFoundException(`Player with id ${addGoalDto.scorerId} not found`);
     }
 
-    // Validate scorer was present at the match
     await this.validatePlayerPlayed(
       scorer.id,
       matchId,
@@ -397,7 +309,6 @@ export class MatchesService {
         throw new NotFoundException(`Player with id ${addGoalDto.assistId} not found`);
       }
 
-      // Validate assist player was present at the match
       await this.validatePlayerPlayed(
         assist.id,
         matchId,

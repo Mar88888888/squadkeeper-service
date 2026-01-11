@@ -16,7 +16,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { EvaluationsService } from './evaluations.service';
 import { CreateEvaluationBatchDto } from './dto/create-evaluation-batch.dto';
-import { StatsPeriod } from '../players/dto/player-stats.dto';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
+import { getDateRangeForPeriod } from '../common/utils/date-range.util';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -59,12 +60,10 @@ export class EvaluationsController {
   ) {
     const { id: userId, role } = req.user;
 
-    // Admins and coaches see all evaluations
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.evaluationsService.findByTraining(id);
     }
 
-    // Get the training to verify access
     const training = await this.trainingsRepository.findOne({
       where: { id },
       relations: ['group'],
@@ -73,7 +72,6 @@ export class EvaluationsController {
       throw new ForbiddenException('Training not found');
     }
 
-    // Players only see their own evaluations
     if (role === UserRole.PLAYER) {
       const player = await this.playersRepository.findOne({
         where: { user: { id: userId } },
@@ -86,7 +84,6 @@ export class EvaluationsController {
       return allEvaluations.filter((e) => e.player.id === player.id);
     }
 
-    // Parents see their children's evaluations
     if (role === UserRole.PARENT) {
       const parent = await this.parentsRepository.findOne({
         where: { user: { id: userId } },
@@ -114,12 +111,10 @@ export class EvaluationsController {
   ) {
     const { id: userId, role } = req.user;
 
-    // Admins and coaches see all evaluations
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.evaluationsService.findByMatch(id);
     }
 
-    // Get the match to verify access
     const match = await this.matchesRepository.findOne({
       where: { id },
       relations: ['group'],
@@ -128,7 +123,6 @@ export class EvaluationsController {
       throw new ForbiddenException('Match not found');
     }
 
-    // Players only see their own evaluations
     if (role === UserRole.PLAYER) {
       const player = await this.playersRepository.findOne({
         where: { user: { id: userId } },
@@ -141,7 +135,6 @@ export class EvaluationsController {
       return allEvaluations.filter((e) => e.player.id === player.id);
     }
 
-    // Parents see their children's evaluations
     if (role === UserRole.PARENT) {
       const parent = await this.parentsRepository.findOne({
         where: { user: { id: userId } },
@@ -163,8 +156,39 @@ export class EvaluationsController {
 
   @Get('player/:id')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  getByPlayer(@Param('id') id: string) {
-    return this.evaluationsService.findByPlayer(id);
+  async getByPlayer(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Request() req: { user: { id: string; role: UserRole } },
+  ) {
+    const { id: userId, role } = req.user;
+
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.evaluationsService.findByPlayer(id);
+    }
+
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+      });
+      if (!player || player.id !== id) {
+        throw new ForbiddenException('You can only view your own evaluations');
+      }
+      return this.evaluationsService.findByPlayer(id);
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children'],
+      });
+      const childIds = parent?.children?.map((c) => c.id) || [];
+      if (!childIds.includes(id)) {
+        throw new ForbiddenException('You can only view your children\'s evaluations');
+      }
+      return this.evaluationsService.findByPlayer(id);
+    }
+
+    throw new ForbiddenException('Access denied');
   }
 
   @Get('stats/my')
@@ -180,7 +204,7 @@ export class EvaluationsController {
       throw new ForbiddenException('Player profile not found');
     }
 
-    const dateRange = this.getDateRangeForPeriod(period || StatsPeriod.ALL_TIME);
+    const dateRange = getDateRangeForPeriod(period || StatsPeriod.ALL_TIME);
     return this.evaluationsService.getRatingStats(player.id, dateRange.start, dateRange.end);
   }
 
@@ -191,7 +215,6 @@ export class EvaluationsController {
     @Query('period') period?: StatsPeriod,
     @Request() req?: { user: { id: string; role: UserRole } },
   ) {
-    // Parents can only see their children's stats
     if (req?.user.role === UserRole.PARENT) {
       const parent = await this.parentsRepository.findOne({
         where: { user: { id: req.user.id } },
@@ -203,39 +226,7 @@ export class EvaluationsController {
       }
     }
 
-    const dateRange = this.getDateRangeForPeriod(period || StatsPeriod.ALL_TIME);
+    const dateRange = getDateRangeForPeriod(period || StatsPeriod.ALL_TIME);
     return this.evaluationsService.getRatingStats(id, dateRange.start, dateRange.end);
-  }
-
-  private getDateRangeForPeriod(period: StatsPeriod): { start?: Date; end?: Date } {
-    const now = new Date();
-
-    switch (period) {
-      case StatsPeriod.THIS_MONTH: {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-        return { start, end };
-      }
-      case StatsPeriod.THIS_SEASON: {
-        const seasonStartMonth = 6; // July
-        const seasonStartDay = 15;
-        let seasonStartYear = now.getFullYear();
-        if (now.getMonth() < seasonStartMonth ||
-            (now.getMonth() === seasonStartMonth && now.getDate() < seasonStartDay)) {
-          seasonStartYear--;
-        }
-        const start = new Date(seasonStartYear, seasonStartMonth, seasonStartDay);
-        const end = new Date(seasonStartYear + 1, seasonStartMonth, seasonStartDay - 1, 23, 59, 59, 999);
-        return { start, end };
-      }
-      case StatsPeriod.THIS_YEAR: {
-        const start = new Date(now.getFullYear(), 0, 1);
-        const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-        return { start, end };
-      }
-      case StatsPeriod.ALL_TIME:
-      default:
-        return {};
-    }
   }
 }

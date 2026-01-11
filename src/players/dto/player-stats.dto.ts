@@ -1,11 +1,5 @@
 import { Position } from '../enums/position.enum';
-
-export enum StatsPeriod {
-  ALL_TIME = 'all_time',
-  THIS_SEASON = 'this_season',
-  THIS_YEAR = 'this_year',
-  THIS_MONTH = 'this_month',
-}
+import { StatsPeriod } from '../../common/enums/stats-period.enum';
 
 export interface AttendanceBreakdown {
   total: number;

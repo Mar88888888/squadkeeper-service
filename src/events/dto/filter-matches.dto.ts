@@ -1,13 +1,5 @@
 import { IsOptional, IsDateString, IsEnum } from 'class-validator';
-
-export enum MatchTimeFilter {
-  ALL = 'all',
-  UPCOMING = 'upcoming',
-  PAST = 'past',
-  THIS_WEEK = 'this_week',
-  NEXT_WEEK = 'next_week',
-  THIS_MONTH = 'this_month',
-}
+import { TimeFilter } from '../../common/enums/time-filter.enum';
 
 export class FilterMatchesDto {
   @IsOptional()
@@ -19,6 +11,6 @@ export class FilterMatchesDto {
   dateTo?: string;
 
   @IsOptional()
-  @IsEnum(MatchTimeFilter)
-  timeFilter?: MatchTimeFilter;
+  @IsEnum(TimeFilter)
+  timeFilter?: TimeFilter;
 }

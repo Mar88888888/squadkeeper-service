@@ -126,13 +126,13 @@ describe('AttendanceService', () => {
 
     it('should mark attendance for training', async () => {
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockTraining) // Find training
-        .mockResolvedValueOnce(mockPlayer) // Find first player
-        .mockResolvedValueOnce(null) // No existing attendance
-        .mockResolvedValueOnce(mockTraining) // Get training for new attendance
-        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' }) // Find second player
-        .mockResolvedValueOnce(null) // No existing attendance
-        .mockResolvedValueOnce(mockTraining); // Get training for new attendance
+        .mockResolvedValueOnce(mockTraining)
+        .mockResolvedValueOnce(mockPlayer)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockTraining)
+        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' })
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockTraining);
 
       mockQueryRunner.manager.create.mockImplementation((_, data) => data);
       mockQueryRunner.manager.save.mockImplementation((entity) =>
@@ -156,10 +156,10 @@ describe('AttendanceService', () => {
       };
 
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockMatch) // Find match
-        .mockResolvedValueOnce(mockPlayer) // Find player
-        .mockResolvedValueOnce(null) // No existing attendance
-        .mockResolvedValueOnce(mockMatch); // Get match for new attendance
+        .mockResolvedValueOnce(mockMatch)
+        .mockResolvedValueOnce(mockPlayer)
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockMatch);
 
       mockQueryRunner.manager.create.mockImplementation((_, data) => data);
       mockQueryRunner.manager.save.mockImplementation((entity) =>
@@ -197,7 +197,7 @@ describe('AttendanceService', () => {
     it('should throw NotFoundException when player not found', async () => {
       mockQueryRunner.manager.findOne
         .mockResolvedValueOnce(mockTraining)
-        .mockResolvedValueOnce(null); // Player not found
+        .mockResolvedValueOnce(null);
 
       await expect(service.markBatch(markBatchDto)).rejects.toThrow(
         NotFoundException,
@@ -356,7 +356,7 @@ describe('AttendanceService', () => {
       expect(result.benched).toBe(1);
       expect(result.totalTrainings).toBe(4);
       expect(result.totalMatches).toBe(1);
-      expect(result.rate).toBe(60); // (1 + 1 + 1) / 5 * 100 = 60%
+      expect(result.rate).toBe(60);
     });
 
     it('should return zero rate when no attendances', async () => {

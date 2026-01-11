@@ -22,74 +22,61 @@ export class AttendanceService {
   constructor(
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
-    @InjectRepository(Training)
-    private trainingsRepository: Repository<Training>,
-    @InjectRepository(Match)
-    private matchesRepository: Repository<Match>,
     private dataSource: DataSource,
   ) {}
 
   async markBatch(dto: MarkAttendanceBatchDto): Promise<Attendance[]> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      // Find the event (Training or Match)
-      if (dto.eventType === EventType.TRAINING) {
-        const training = await queryRunner.manager.findOne(Training, {
-          where: { id: dto.eventId },
-        });
-        if (!training) {
-          throw new NotFoundException(
-            `Training with ID ${dto.eventId} not found`,
+      return await this.dataSource.transaction(async (manager) => {
+        if (dto.eventType === EventType.TRAINING) {
+          const training = await manager.findOne(Training, {
+            where: { id: dto.eventId },
+          });
+          if (!training) {
+            throw new NotFoundException(
+              `Training with ID ${dto.eventId} not found`,
+            );
+          }
+        } else {
+          const match = await manager.findOne(Match, {
+            where: { id: dto.eventId },
+          });
+          if (!match) {
+            throw new NotFoundException(
+              `Match with ID ${dto.eventId} not found`,
+            );
+          }
+        }
+
+        const results: Attendance[] = [];
+
+        for (const record of dto.records) {
+          const attendance = await this.upsertAttendance(
+            manager,
+            record,
+            dto.eventType,
+            dto.eventId,
           );
+          results.push(attendance);
         }
-      } else {
-        const match = await queryRunner.manager.findOne(Match, {
-          where: { id: dto.eventId },
-        });
-        if (!match) {
-          throw new NotFoundException(`Match with ID ${dto.eventId} not found`);
-        }
-      }
 
-      const results: Attendance[] = [];
-
-      // Process each record
-      for (const record of dto.records) {
-        const attendance = await this.upsertAttendance(
-          queryRunner,
-          record,
-          dto.eventType,
-          dto.eventId,
-        );
-        results.push(attendance);
-      }
-
-      await queryRunner.commitTransaction();
-      return results;
+        return results;
+      });
     } catch (error) {
-      await queryRunner.rollbackTransaction();
       if (error instanceof NotFoundException) {
         throw error;
       }
       throw new BadRequestException('Failed to mark attendance');
-    } finally {
-      await queryRunner.release();
     }
   }
 
   private async upsertAttendance(
-    queryRunner: any,
+    manager: any,
     record: AttendanceRecordDto,
     eventType: EventType,
     eventId: string,
   ): Promise<Attendance> {
-    // Find player
-    const player = await queryRunner.manager.findOne(Player, {
+    const player = await manager.findOne(Player, {
       where: { id: record.playerId },
     });
     if (!player) {
@@ -98,8 +85,7 @@ export class AttendanceService {
       );
     }
 
-    // Check if attendance already exists
-    const existingAttendance = await queryRunner.manager.findOne(Attendance, {
+    const existingAttendance = await manager.findOne(Attendance, {
       where: {
         player: { id: record.playerId },
         ...(eventType === EventType.TRAINING
@@ -110,18 +96,16 @@ export class AttendanceService {
     });
 
     if (existingAttendance) {
-      // Update existing attendance
       existingAttendance.status = record.status;
       existingAttendance.notes = record.notes || null;
-      const savedAttendance = await queryRunner.manager.save(existingAttendance);
+      const savedAttendance = await manager.save(existingAttendance);
 
-      // If status changed to not present (not PRESENT or LATE), delete evaluations for this training
       if (
         eventType === EventType.TRAINING &&
         record.status !== AttendanceStatus.PRESENT &&
         record.status !== AttendanceStatus.LATE
       ) {
-        await queryRunner.manager.delete(Evaluation, {
+        await manager.delete(Evaluation, {
           player: { id: record.playerId },
           training: { id: eventId },
         });
@@ -129,7 +113,6 @@ export class AttendanceService {
 
       return savedAttendance;
     } else {
-      // Create new attendance
       const attendanceData: Partial<Attendance> = {
         player,
         status: record.status,
@@ -137,19 +120,19 @@ export class AttendanceService {
       };
 
       if (eventType === EventType.TRAINING) {
-        attendanceData.training = await queryRunner.manager.findOne(Training, {
+        attendanceData.training = await manager.findOne(Training, {
           where: { id: eventId },
         });
         attendanceData.match = null;
       } else {
-        attendanceData.match = await queryRunner.manager.findOne(Match, {
+        attendanceData.match = await manager.findOne(Match, {
           where: { id: eventId },
         });
         attendanceData.training = null;
       }
 
-      const attendance = queryRunner.manager.create(Attendance, attendanceData);
-      return await queryRunner.manager.save(attendance);
+      const attendance = manager.create(Attendance, attendanceData);
+      return await manager.save(attendance);
     }
   }
 
@@ -207,7 +190,6 @@ export class AttendanceService {
     };
 
     attendances.forEach((a) => {
-      // Count by event type
       if (a.training) {
         stats.totalTrainings++;
       } else if (a.match) {
@@ -233,7 +215,6 @@ export class AttendanceService {
       }
     });
 
-    // Calculate rate: (present + late + benched) / total * 100
     const attended = stats.present + stats.late + stats.benched;
     if (stats.total > 0) {
       stats.rate = Math.round((attended / stats.total) * 100);
@@ -294,7 +275,6 @@ export class AttendanceService {
       };
 
       attendances.forEach((a) => {
-        // Count by event type
         if (a.training) {
           stats.totalTrainings++;
         } else if (a.match) {
@@ -320,7 +300,6 @@ export class AttendanceService {
         }
       });
 
-      // Calculate rate: (present + late + benched) / total * 100
       const attended = stats.present + stats.late + stats.benched;
       if (stats.total > 0) {
         stats.rate = Math.round((attended / stats.total) * 100);

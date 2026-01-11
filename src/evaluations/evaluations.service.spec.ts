@@ -8,6 +8,8 @@ import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
+import { Attendance } from '../attendance/entities/attendance.entity';
+import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 
 describe('EvaluationsService', () => {
   let service: EvaluationsService;
@@ -38,6 +40,11 @@ describe('EvaluationsService', () => {
     id: 'match-123',
     startTime: new Date('2024-01-20T14:00:00Z'),
   } as unknown as Match;
+
+  const mockAttendance = {
+    id: 'attendance-123',
+    status: AttendanceStatus.PRESENT,
+  } as unknown as Attendance;
 
   const mockEvaluation = {
     id: 'eval-123',
@@ -124,12 +131,14 @@ describe('EvaluationsService', () => {
 
     it('should create evaluations for training', async () => {
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockTraining) // Find training
-        .mockResolvedValueOnce(mockCoach) // Find coach
-        .mockResolvedValueOnce(mockPlayer) // Find first player
-        .mockResolvedValueOnce(null) // No existing evaluation
-        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' }) // Find second player
-        .mockResolvedValueOnce(null); // No existing evaluation
+        .mockResolvedValueOnce(mockTraining)        // Find training
+        .mockResolvedValueOnce(mockCoach)           // Find coach
+        .mockResolvedValueOnce(mockPlayer)          // Find player 1
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 1
+        .mockResolvedValueOnce(null)                // No existing evaluation for player 1
+        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' })  // Find player 2
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 2
+        .mockResolvedValueOnce(null);               // No existing evaluation for player 2
 
       mockQueryRunner.manager.create.mockImplementation((_, data) => data);
       mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
@@ -149,10 +158,11 @@ describe('EvaluationsService', () => {
       };
 
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockMatch)
-        .mockResolvedValueOnce(mockCoach)
-        .mockResolvedValueOnce(mockPlayer)
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce(mockMatch)           // Find match
+        .mockResolvedValueOnce(mockCoach)           // Find coach
+        .mockResolvedValueOnce(mockPlayer)          // Find player
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance
+        .mockResolvedValueOnce(null);               // No existing evaluation
 
       mockQueryRunner.manager.create.mockImplementation((_, data) => data);
       mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
@@ -228,12 +238,14 @@ describe('EvaluationsService', () => {
 
     it('should update existing evaluation', async () => {
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockTraining)
-        .mockResolvedValueOnce(mockCoach)
-        .mockResolvedValueOnce(mockPlayer)
-        .mockResolvedValueOnce(mockEvaluation) // Existing evaluation
-        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' })
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce(mockTraining)        // Find training
+        .mockResolvedValueOnce(mockCoach)           // Find coach
+        .mockResolvedValueOnce(mockPlayer)          // Find player 1
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 1
+        .mockResolvedValueOnce(mockEvaluation)      // Existing evaluation for player 1
+        .mockResolvedValueOnce({ ...mockPlayer, id: 'player-456' })  // Find player 2
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance for player 2
+        .mockResolvedValueOnce(null);               // No existing evaluation for player 2
 
       mockQueryRunner.manager.create.mockImplementation((_, data) => data);
       mockQueryRunner.manager.save.mockImplementation((entity) => Promise.resolve(entity));
@@ -245,10 +257,11 @@ describe('EvaluationsService', () => {
 
     it('should rollback on error', async () => {
       mockQueryRunner.manager.findOne
-        .mockResolvedValueOnce(mockTraining)
-        .mockResolvedValueOnce(mockCoach)
-        .mockResolvedValueOnce(mockPlayer)
-        .mockResolvedValueOnce(null);
+        .mockResolvedValueOnce(mockTraining)        // Find training
+        .mockResolvedValueOnce(mockCoach)           // Find coach
+        .mockResolvedValueOnce(mockPlayer)          // Find player
+        .mockResolvedValueOnce(mockAttendance)      // Find attendance
+        .mockResolvedValueOnce(null);               // No existing evaluation
 
       mockQueryRunner.manager.create.mockImplementation(() => {
         throw new Error('DB error');

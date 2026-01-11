@@ -14,10 +14,8 @@ import { Attendance } from '../attendance/entities/attendance.entity';
 import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
 
-// Statuses that count as "played" - can receive evaluations
 const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
-// Default rating for missing values
 const DEFAULT_RATING = 5;
 
 export interface RatingHistoryPoint {
@@ -72,82 +70,73 @@ export class EvaluationsService {
       throw new BadRequestException('Cannot specify both trainingId and matchId');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      let training: Training | null = null;
-      let match: Match | null = null;
+      return await this.dataSource.transaction(async (manager) => {
+        let training: Training | null = null;
+        let match: Match | null = null;
 
-      if (dto.trainingId) {
-        training = await queryRunner.manager.findOne(Training, {
-          where: { id: dto.trainingId },
-        });
-        if (!training) {
-          throw new NotFoundException(`Training with ID ${dto.trainingId} not found`);
+        if (dto.trainingId) {
+          training = await manager.findOne(Training, {
+            where: { id: dto.trainingId },
+          });
+          if (!training) {
+            throw new NotFoundException(`Training with ID ${dto.trainingId} not found`);
+          }
         }
-      }
 
-      if (dto.matchId) {
-        match = await queryRunner.manager.findOne(Match, {
-          where: { id: dto.matchId },
-        });
-        if (!match) {
-          throw new NotFoundException(`Match with ID ${dto.matchId} not found`);
+        if (dto.matchId) {
+          match = await manager.findOne(Match, {
+            where: { id: dto.matchId },
+          });
+          if (!match) {
+            throw new NotFoundException(`Match with ID ${dto.matchId} not found`);
+          }
         }
-      }
 
-      // Find coach by user ID
-      const coach = await queryRunner.manager.findOne(Coach, {
-        where: { user: { id: coachUserId } },
+        const coach = await manager.findOne(Coach, {
+          where: { user: { id: coachUserId } },
+        });
+        if (!coach) {
+          throw new NotFoundException('Coach profile not found');
+        }
+
+        const results: Evaluation[] = [];
+
+        for (const record of dto.records) {
+          const evaluation = await this.upsertEvaluation(
+            manager,
+            record,
+            training,
+            match,
+            coach,
+          );
+          results.push(evaluation);
+        }
+
+        return results;
       });
-      if (!coach) {
-        throw new NotFoundException('Coach profile not found');
-      }
-
-      const results: Evaluation[] = [];
-
-      for (const record of dto.records) {
-        const evaluation = await this.upsertEvaluation(
-          queryRunner,
-          record,
-          training,
-          match,
-          coach,
-        );
-        results.push(evaluation);
-      }
-
-      await queryRunner.commitTransaction();
-      return results;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
       throw new BadRequestException('Failed to create evaluations');
-    } finally {
-      await queryRunner.release();
     }
   }
 
   private async upsertEvaluation(
-    queryRunner: any,
+    manager: any,
     record: EvaluationRecordDto,
     training: Training | null,
     match: Match | null,
     coach: Coach,
   ): Promise<Evaluation> {
-    // Find player
-    const player = await queryRunner.manager.findOne(Player, {
+    const player = await manager.findOne(Player, {
       where: { id: record.playerId },
     });
     if (!player) {
       throw new NotFoundException(`Player with ID ${record.playerId} not found`);
     }
 
-    // Check if player has valid attendance (PRESENT or LATE) for this event
     const attendanceWhere: any = { player: { id: record.playerId } };
     if (training) {
       attendanceWhere.training = { id: training.id };
@@ -156,7 +145,7 @@ export class EvaluationsService {
       attendanceWhere.match = { id: match.id };
     }
 
-    const attendance = await queryRunner.manager.findOne(Attendance, {
+    const attendance = await manager.findOne(Attendance, {
       where: attendanceWhere,
     });
 
@@ -166,7 +155,6 @@ export class EvaluationsService {
       );
     }
 
-    // Check if evaluation already exists for this player and event
     const whereCondition: any = {
       player: { id: record.playerId },
     };
@@ -181,13 +169,12 @@ export class EvaluationsService {
       whereCondition.match = null;
     }
 
-    const existingEvaluation = await queryRunner.manager.findOne(Evaluation, {
+    const existingEvaluation = await manager.findOne(Evaluation, {
       where: whereCondition,
       relations: ['player', 'training', 'match', 'coach'],
     });
 
     if (existingEvaluation) {
-      // Update existing evaluation - only update fields that are provided
       if (record.technical !== undefined) {
         existingEvaluation.technical = record.technical;
       }
@@ -204,10 +191,9 @@ export class EvaluationsService {
         existingEvaluation.comment = record.comment || null;
       }
       existingEvaluation.coach = coach;
-      return await queryRunner.manager.save(existingEvaluation);
+      return await manager.save(existingEvaluation);
     } else {
-      // Create new evaluation - use default values for missing ratings
-      const evaluation = queryRunner.manager.create(Evaluation, {
+      const evaluation = manager.create(Evaluation, {
         player,
         training,
         match,
@@ -218,7 +204,7 @@ export class EvaluationsService {
         psychological: record.psychological ?? DEFAULT_RATING,
         comment: record.comment || null,
       });
-      return await queryRunner.manager.save(evaluation);
+      return await manager.save(evaluation);
     }
   }
 
@@ -272,14 +258,12 @@ export class EvaluationsService {
       throw new NotFoundException(`Player with ID ${playerId} not found`);
     }
 
-    // Get all evaluations for the player
     const evaluations = await this.evaluationsRepository.find({
       where: { player: { id: playerId } },
       relations: ['training', 'match'],
       order: { createdAt: 'ASC' },
     });
 
-    // Filter by date and build history
     const history: RatingHistoryPoint[] = [];
     const categoryRatings: { [key: string]: number[] } = {
       technical: [],
@@ -306,11 +290,9 @@ export class EvaluationsService {
         continue;
       }
 
-      // Apply date filter
       if (startDate && eventDate < startDate) continue;
       if (endDate && eventDate > endDate) continue;
 
-      // Calculate average for this evaluation
       const ratings = [
         evaluation.technical,
         evaluation.tactical,
@@ -324,7 +306,6 @@ export class EvaluationsService {
 
       allAverages.push(averageRating);
 
-      // Collect category ratings
       if (evaluation.technical !== null) categoryRatings.technical.push(evaluation.technical);
       if (evaluation.tactical !== null) categoryRatings.tactical.push(evaluation.tactical);
       if (evaluation.physical !== null) categoryRatings.physical.push(evaluation.physical);
@@ -344,7 +325,6 @@ export class EvaluationsService {
       });
     }
 
-    // Calculate overall averages
     const calculateAverage = (arr: number[]): number | null => {
       if (arr.length === 0) return null;
       const avg = arr.reduce((a, b) => a + b, 0) / arr.length;

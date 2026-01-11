@@ -19,14 +19,13 @@ import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import {
-  StatsPeriod,
   PlayerStatsResponse,
   TeamStatsResponse,
   ChildrenStatsResponse,
 } from './dto/player-stats.dto';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { Position, DEFENSIVE_POSITIONS } from './enums/position.enum';
-
-type DateRange = { start?: Date; end?: Date };
+import { getDateRangeForPeriod, DateRange } from '../common/utils/date-range.util';
 
 interface AttendanceStats {
   total: number;
@@ -57,63 +56,6 @@ export class PlayersService {
     private parentsRepository: Repository<Parent>,
     private dataSource: DataSource,
   ) {}
-
-  private getDateRangeForPeriod(period: StatsPeriod): DateRange {
-    const now = new Date();
-
-    switch (period) {
-      case StatsPeriod.THIS_MONTH: {
-        const start = new Date(now.getFullYear(), now.getMonth(), 1);
-        const end = new Date(
-          now.getFullYear(),
-          now.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        );
-        return { start, end };
-      }
-      case StatsPeriod.THIS_SEASON: {
-        const seasonStartMonth = 6;
-        const seasonStartDay = 15;
-
-        let seasonStartYear = now.getFullYear();
-        if (
-          now.getMonth() < seasonStartMonth ||
-          (now.getMonth() === seasonStartMonth &&
-            now.getDate() < seasonStartDay)
-        ) {
-          seasonStartYear--;
-        }
-
-        const start = new Date(
-          seasonStartYear,
-          seasonStartMonth,
-          seasonStartDay,
-        );
-        const end = new Date(
-          seasonStartYear + 1,
-          seasonStartMonth,
-          seasonStartDay - 1,
-          23,
-          59,
-          59,
-          999,
-        );
-        return { start, end };
-      }
-      case StatsPeriod.THIS_YEAR: {
-        const start = new Date(now.getFullYear(), 0, 1);
-        const end = new Date(now.getFullYear(), 11, 31, 23, 59, 59, 999);
-        return { start, end };
-      }
-      case StatsPeriod.ALL_TIME:
-      default:
-        return {};
-    }
-  }
 
   private async findPlayerById(playerId: string): Promise<Player> {
     const player = await this.playersRepository.findOne({
@@ -303,7 +245,7 @@ export class PlayersService {
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<PlayerStatsResponse> {
     const player = await this.findPlayerById(playerId);
-    const dateRange = this.getDateRangeForPeriod(period);
+    const dateRange = getDateRangeForPeriod(period);
 
     const [matchesPlayed, goals, assists, cleanSheets, attendance] =
       await Promise.all([
@@ -436,182 +378,128 @@ export class PlayersService {
       throw new NotFoundException('Player not found');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const userId = player.user?.id;
+      await this.dataSource.transaction(async (manager) => {
+        const userId = player.user?.id;
 
-      if (userId) {
-        await queryRunner.manager
-          .createQueryBuilder()
-          .update(User)
-          .set({ player: null as unknown as Player })
-          .where('id = :userId', { userId })
-          .execute();
-      }
+        if (userId) {
+          await manager
+            .createQueryBuilder()
+            .update(User)
+            .set({ player: null as unknown as Player })
+            .where('id = :userId', { userId })
+            .execute();
+        }
 
-      await queryRunner.manager.remove(player);
+        await manager.remove(player);
 
-      if (userId) {
-        await queryRunner.manager.delete(User, userId);
-      }
-
-      await queryRunner.commitTransaction();
+        if (userId) {
+          await manager.delete(User, userId);
+        }
+      });
     } catch {
-      await queryRunner.rollbackTransaction();
       throw new BadRequestException('Failed to delete player');
-    } finally {
-      await queryRunner.release();
     }
   }
 
   async create(createPlayerDto: CreatePlayerDto): Promise<Player> {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      const existingUser = await queryRunner.manager.findOne(User, {
-        where: { email: createPlayerDto.email },
+      return await this.dataSource.transaction(async (manager) => {
+        const existingUser = await manager.findOne(User, {
+          where: { email: createPlayerDto.email },
+        });
+
+        if (existingUser) {
+          throw new ConflictException('Email already exists');
+        }
+
+        const hashedPassword = await bcrypt.hash(createPlayerDto.password, 10);
+
+        const user = manager.create(User, {
+          email: createPlayerDto.email,
+          passwordHash: hashedPassword,
+          role: UserRole.PLAYER,
+          firstName: createPlayerDto.firstName,
+          lastName: createPlayerDto.lastName,
+        });
+
+        await manager.save(user);
+
+        const player = manager.create(Player, {
+          position: createPlayerDto.position,
+          height: createPlayerDto.height,
+          weight: createPlayerDto.weight,
+          strongFoot: createPlayerDto.strongFoot,
+          firstName: createPlayerDto.firstName,
+          lastName: createPlayerDto.lastName,
+          phoneNumber: createPlayerDto.phoneNumber,
+          dateOfBirth: new Date(createPlayerDto.dateOfBirth),
+          user,
+        });
+
+        await manager.save(player);
+
+        user.player = player;
+        await manager.save(user);
+
+        return player;
       });
-
-      if (existingUser) {
-        throw new ConflictException('Email already exists');
-      }
-
-      const hashedPassword = await bcrypt.hash(createPlayerDto.password, 10);
-
-      const user = queryRunner.manager.create(User, {
-        email: createPlayerDto.email,
-        passwordHash: hashedPassword,
-        role: UserRole.PLAYER,
-        firstName: createPlayerDto.firstName,
-        lastName: createPlayerDto.lastName,
-      });
-
-      await queryRunner.manager.save(user);
-
-      const player = queryRunner.manager.create(Player, {
-        position: createPlayerDto.position,
-        height: createPlayerDto.height,
-        weight: createPlayerDto.weight,
-        strongFoot: createPlayerDto.strongFoot,
-        firstName: createPlayerDto.firstName,
-        lastName: createPlayerDto.lastName,
-        phoneNumber: createPlayerDto.phoneNumber,
-        dateOfBirth: new Date(createPlayerDto.dateOfBirth),
-        user,
-      });
-
-      await queryRunner.manager.save(player);
-
-      user.player = player;
-      await queryRunner.manager.save(user);
-
-      await queryRunner.commitTransaction();
-
-      return player;
     } catch (error) {
-      await queryRunner.rollbackTransaction();
       if (error instanceof ConflictException) {
         throw error;
       }
       throw new BadRequestException('Failed to create player');
-    } finally {
-      await queryRunner.release();
     }
   }
 
   async update(id: string, updatePlayerDto: UpdatePlayerDto): Promise<Player> {
     const player = await this.playersRepository.findOne({
       where: { id },
-      relations: ['user'],
+      relations: ['user', 'group', 'parent'],
     });
 
     if (!player) {
       throw new NotFoundException('Player not found');
     }
 
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-
     try {
-      if (player.user) {
-        if (updatePlayerDto.email !== undefined) {
-          const existingUser = await queryRunner.manager.findOne(User, {
-            where: { email: updatePlayerDto.email },
-          });
-          if (existingUser && existingUser.id !== player.user.id) {
-            throw new ConflictException('Email already exists');
+      return await this.dataSource.transaction(async (manager) => {
+        const { email, password, firstName, lastName } = updatePlayerDto;
+
+        if (player.user) {
+          if (email !== undefined && email !== player.user.email) {
+            const existingUser = await manager.findOne(User, { where: { email } });
+            if (existingUser) {
+              throw new ConflictException('Email already exists');
+            }
+            player.user.email = email;
           }
-          player.user.email = updatePlayerDto.email;
+
+          if (password !== undefined) {
+            player.user.passwordHash = await bcrypt.hash(password, 10);
+          }
+          if (firstName !== undefined) player.user.firstName = firstName;
+          if (lastName !== undefined) player.user.lastName = lastName;
+
+          await manager.save(player.user);
         }
 
-        if (updatePlayerDto.password !== undefined) {
-          player.user.passwordHash = await bcrypt.hash(
-            updatePlayerDto.password,
-            10,
-          );
-        }
+        if (firstName !== undefined) player.firstName = firstName;
+        if (lastName !== undefined) player.lastName = lastName;
+        if (updatePlayerDto.phoneNumber !== undefined) player.phoneNumber = updatePlayerDto.phoneNumber;
+        if (updatePlayerDto.dateOfBirth !== undefined) player.dateOfBirth = new Date(updatePlayerDto.dateOfBirth);
+        if (updatePlayerDto.position !== undefined) player.position = updatePlayerDto.position;
+        if (updatePlayerDto.height !== undefined) player.height = updatePlayerDto.height;
+        if (updatePlayerDto.weight !== undefined) player.weight = updatePlayerDto.weight;
+        if (updatePlayerDto.strongFoot !== undefined) player.strongFoot = updatePlayerDto.strongFoot;
 
-        if (updatePlayerDto.firstName !== undefined) {
-          player.user.firstName = updatePlayerDto.firstName;
-        }
+        await manager.save(player);
 
-        if (updatePlayerDto.lastName !== undefined) {
-          player.user.lastName = updatePlayerDto.lastName;
-        }
-
-        await queryRunner.manager.save(player.user);
-      }
-
-      if (updatePlayerDto.firstName !== undefined) {
-        player.firstName = updatePlayerDto.firstName;
-      }
-
-      if (updatePlayerDto.lastName !== undefined) {
-        player.lastName = updatePlayerDto.lastName;
-      }
-
-      if (updatePlayerDto.phoneNumber !== undefined) {
-        player.phoneNumber = updatePlayerDto.phoneNumber;
-      }
-
-      if (updatePlayerDto.dateOfBirth !== undefined) {
-        player.dateOfBirth = new Date(updatePlayerDto.dateOfBirth);
-      }
-
-      if (updatePlayerDto.position !== undefined) {
-        player.position = updatePlayerDto.position;
-      }
-
-      if (updatePlayerDto.height !== undefined) {
-        player.height = updatePlayerDto.height;
-      }
-
-      if (updatePlayerDto.weight !== undefined) {
-        player.weight = updatePlayerDto.weight;
-      }
-
-      if (updatePlayerDto.strongFoot !== undefined) {
-        player.strongFoot = updatePlayerDto.strongFoot;
-      }
-
-      await queryRunner.manager.save(player);
-      await queryRunner.commitTransaction();
-
-      return player;
+        return player;
+      });
     } catch (error) {
-      await queryRunner.rollbackTransaction();
-      if (error instanceof ConflictException) {
-        throw error;
-      }
+      if (error instanceof ConflictException) throw error;
       throw new BadRequestException('Failed to update player');
-    } finally {
-      await queryRunner.release();
     }
   }
 }
