@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Player } from '../players/entities/player.entity';
 import { Match } from '../events/entities/match.entity';
 import { Goal } from '../events/entities/goal.entity';
@@ -42,6 +42,25 @@ interface CalculationSettings {
   defenseWeight: number;
   teamWeight: number;
   positionExpectations: PositionExpectations;
+}
+
+interface MatchData {
+  matchId: string;
+  playerIds: string[];
+  isWin: boolean;
+  isDraw: boolean;
+  goalsScored: number;
+  goalsConceded: number;
+}
+
+interface CombinationStatsAccumulator {
+  players: string[];
+  matches: string[];
+  wins: number;
+  draws: number;
+  losses: number;
+  goalsScored: number;
+  goalsConceded: number;
 }
 
 @Injectable()
@@ -550,236 +569,42 @@ export class AnalyticsService {
     }
 
     const dateRange = getDateRangeForPeriod(period);
+    const playerInfoMap = this.buildPlayerInfoMap(group.players);
 
-    const matchesQuery = this.matchesRepository
-      .createQueryBuilder('m')
-      .where('m.group.id = :groupId', { groupId })
-      .andWhere('m.homeGoals IS NOT NULL')
-      .andWhere('m.awayGoals IS NOT NULL');
-
-    if (dateRange.start && dateRange.end) {
-      matchesQuery.andWhere('m.startTime BETWEEN :start AND :end', {
-        start: dateRange.start,
-        end: dateRange.end,
-      });
+    const matches = await this.fetchMatchesForGroup(groupId, dateRange);
+    if (matches.length === 0) {
+      return this.buildEmptyChemistryResponse(group, period, minimumMatches);
     }
 
-    const matches = await matchesQuery.getMany();
+    const matchIds = matches.map((m) => m.id);
+    const attendanceByMatch = await this.fetchAttendanceByMatch(matchIds);
+    const matchDataList = this.buildMatchDataList(
+      matches,
+      attendanceByMatch,
+      playerInfoMap,
+    );
 
-    const playerInfoMap = new Map<string, PlayerInfo>();
-    for (const player of group.players) {
-      playerInfoMap.set(player.id, {
-        id: player.id,
-        name: `${player.firstName} ${player.lastName}`,
-        position: player.position,
-      });
-    }
+    const { pairStats, trioStats } = this.calculateCombinationStats(matchDataList);
 
-    const matchDataList: Array<{
-      matchId: string;
-      playerIds: string[];
-      isWin: boolean;
-      isDraw: boolean;
-      goalsScored: number;
-      goalsConceded: number;
-    }> = [];
+    const allMatchIds = [...new Set(matchDataList.map((m) => m.matchId))];
+    const allPlayerIds = [...playerInfoMap.keys()];
+    const evaluationsMap = await this.fetchEvaluationsMap(
+      allPlayerIds,
+      allMatchIds,
+    );
 
-    for (const match of matches) {
-      const attendances = await this.attendanceRepository.find({
-        where: {
-          match: { id: match.id },
-          status: AttendanceStatus.PRESENT,
-        },
-        relations: ['player'],
-      });
-
-      const lateAttendances = await this.attendanceRepository.find({
-        where: {
-          match: { id: match.id },
-          status: AttendanceStatus.LATE,
-        },
-        relations: ['player'],
-      });
-
-      const playerIds = [
-        ...attendances.map((a) => a.player.id),
-        ...lateAttendances.map((a) => a.player.id),
-      ].filter((id) => playerInfoMap.has(id));
-
-      if (playerIds.length < 2) continue;
-
-      const goalsScored = match.isHome ? match.homeGoals! : match.awayGoals!;
-      const goalsConceded = match.isHome ? match.awayGoals! : match.homeGoals!;
-      const isWin = goalsScored > goalsConceded;
-      const isDraw = goalsScored === goalsConceded;
-
-      matchDataList.push({
-        matchId: match.id,
-        playerIds,
-        isWin,
-        isDraw,
-        goalsScored,
-        goalsConceded,
-      });
-    }
-
-    const pairStats = new Map<
-      string,
-      {
-        players: string[];
-        matches: string[];
-        wins: number;
-        draws: number;
-        losses: number;
-        goalsScored: number;
-        goalsConceded: number;
-      }
-    >();
-
-    const trioStats = new Map<
-      string,
-      {
-        players: string[];
-        matches: string[];
-        wins: number;
-        draws: number;
-        losses: number;
-        goalsScored: number;
-        goalsConceded: number;
-      }
-    >();
-
-    for (const matchData of matchDataList) {
-      const { playerIds, matchId, isWin, isDraw, goalsScored, goalsConceded } =
-        matchData;
-
-      for (let i = 0; i < playerIds.length; i++) {
-        for (let j = i + 1; j < playerIds.length; j++) {
-          const key = [playerIds[i], playerIds[j]].sort().join('-');
-          if (!pairStats.has(key)) {
-            pairStats.set(key, {
-              players: [playerIds[i], playerIds[j]].sort(),
-              matches: [],
-              wins: 0,
-              draws: 0,
-              losses: 0,
-              goalsScored: 0,
-              goalsConceded: 0,
-            });
-          }
-          const stats = pairStats.get(key)!;
-          stats.matches.push(matchId);
-          if (isWin) stats.wins++;
-          else if (isDraw) stats.draws++;
-          else stats.losses++;
-          stats.goalsScored += goalsScored;
-          stats.goalsConceded += goalsConceded;
-        }
-      }
-
-      for (let i = 0; i < playerIds.length; i++) {
-        for (let j = i + 1; j < playerIds.length; j++) {
-          for (let k = j + 1; k < playerIds.length; k++) {
-            const key = [playerIds[i], playerIds[j], playerIds[k]]
-              .sort()
-              .join('-');
-            if (!trioStats.has(key)) {
-              trioStats.set(key, {
-                players: [playerIds[i], playerIds[j], playerIds[k]].sort(),
-                matches: [],
-                wins: 0,
-                draws: 0,
-                losses: 0,
-                goalsScored: 0,
-                goalsConceded: 0,
-              });
-            }
-            const stats = trioStats.get(key)!;
-            stats.matches.push(matchId);
-            if (isWin) stats.wins++;
-            else if (isDraw) stats.draws++;
-            else stats.losses++;
-            stats.goalsScored += goalsScored;
-            stats.goalsConceded += goalsConceded;
-          }
-        }
-      }
-    }
-
-    const buildCombinationStats = async (
-      statsMap: Map<string, any>,
-      minMatches: number,
-    ): Promise<PlayerCombinationStats[]> => {
-      const results: PlayerCombinationStats[] = [];
-
-      for (const [, stats] of statsMap) {
-        if (stats.matches.length < minMatches) continue;
-
-        const matchesTogether = stats.matches.length;
-        const winRate = Math.round((stats.wins / matchesTogether) * 100);
-        const goalDifference = stats.goalsScored - stats.goalsConceded;
-        const avgGoalDifference =
-          Math.round((goalDifference / matchesTogether) * 100) / 100;
-
-        let avgRating: number | null = null;
-        const evaluations = await this.evaluationsRepository
-          .createQueryBuilder('e')
-          .innerJoin('e.match', 'm')
-          .where('e.player.id IN (:...playerIds)', { playerIds: stats.players })
-          .andWhere('m.id IN (:...matchIds)', { matchIds: stats.matches })
-          .getMany();
-
-        if (evaluations.length > 0) {
-          const allRatings: number[] = [];
-          for (const e of evaluations) {
-            if (e.technical !== null) allRatings.push(e.technical);
-            if (e.tactical !== null) allRatings.push(e.tactical);
-            if (e.physical !== null) allRatings.push(e.physical);
-            if (e.psychological !== null) allRatings.push(e.psychological);
-          }
-          if (allRatings.length > 0) {
-            avgRating =
-              Math.round(
-                (allRatings.reduce((sum, r) => sum + r, 0) /
-                  allRatings.length) *
-                  10,
-              ) / 10;
-          }
-        }
-
-        const normalizedGoalDiff =
-          Math.min(Math.max((avgGoalDifference + 3) / 6, 0), 1) * 100;
-        const normalizedEval = avgRating !== null ? (avgRating / 10) * 100 : 50;
-        const chemistryScore =
-          Math.round(
-            (winRate * 0.4 +
-              normalizedGoalDiff * 0.35 +
-              normalizedEval * 0.25) *
-              10,
-          ) / 10;
-
-        results.push({
-          players: stats.players.map((id: string) => playerInfoMap.get(id)!),
-          matchesTogether,
-          wins: stats.wins,
-          draws: stats.draws,
-          losses: stats.losses,
-          winRate,
-          goalsScored: stats.goalsScored,
-          goalsConceded: stats.goalsConceded,
-          goalDifference,
-          avgGoalDifference,
-          averageEvaluationRating: avgRating,
-          chemistryScore,
-        });
-      }
-
-      results.sort((a, b) => b.chemistryScore - a.chemistryScore);
-      return results;
-    };
-
-    const bestPairs = await buildCombinationStats(pairStats, minimumMatches);
-    const bestTrios = await buildCombinationStats(trioStats, minimumMatches);
+    const bestPairs = this.buildCombinationResults(
+      pairStats,
+      minimumMatches,
+      playerInfoMap,
+      evaluationsMap,
+    );
+    const bestTrios = this.buildCombinationResults(
+      trioStats,
+      minimumMatches,
+      playerInfoMap,
+      evaluationsMap,
+    );
 
     const corePlayers = this.identifyCorePlayers(
       [...bestPairs.slice(0, 10), ...bestTrios.slice(0, 5)],
@@ -795,6 +620,353 @@ export class AnalyticsService {
       bestPairs: bestPairs.slice(0, 10),
       bestTrios: bestTrios.slice(0, 5),
       corePlayers,
+    };
+  }
+
+  private buildPlayerInfoMap(players: Player[]): Map<string, PlayerInfo> {
+    const map = new Map<string, PlayerInfo>();
+    for (const player of players) {
+      map.set(player.id, {
+        id: player.id,
+        name: `${player.firstName} ${player.lastName}`,
+        position: player.position,
+      });
+    }
+    return map;
+  }
+
+  private async fetchMatchesForGroup(
+    groupId: string,
+    dateRange: { start?: Date; end?: Date },
+  ): Promise<Match[]> {
+    const query = this.matchesRepository
+      .createQueryBuilder('m')
+      .where('m.group.id = :groupId', { groupId })
+      .andWhere('m.homeGoals IS NOT NULL')
+      .andWhere('m.awayGoals IS NOT NULL');
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    return query.getMany();
+  }
+
+  private async fetchAttendanceByMatch(
+    matchIds: string[],
+  ): Promise<Map<string, string[]>> {
+    if (matchIds.length === 0) return new Map();
+
+    const attendances = await this.attendanceRepository.find({
+      where: {
+        match: { id: In(matchIds) },
+        status: In(PLAYED_STATUSES),
+      },
+      relations: ['player', 'match'],
+    });
+
+    const byMatch = new Map<string, string[]>();
+    for (const attendance of attendances) {
+      if (!attendance.match) continue;
+      const matchId = attendance.match.id;
+      if (!byMatch.has(matchId)) {
+        byMatch.set(matchId, []);
+      }
+      byMatch.get(matchId)!.push(attendance.player.id);
+    }
+
+    return byMatch;
+  }
+
+  private buildMatchDataList(
+    matches: Match[],
+    attendanceByMatch: Map<string, string[]>,
+    playerInfoMap: Map<string, PlayerInfo>,
+  ): MatchData[] {
+    const result: MatchData[] = [];
+
+    for (const match of matches) {
+      const playerIds = (attendanceByMatch.get(match.id) || []).filter((id) =>
+        playerInfoMap.has(id),
+      );
+
+      if (playerIds.length < 2) continue;
+
+      const goalsScored = match.isHome ? match.homeGoals! : match.awayGoals!;
+      const goalsConceded = match.isHome ? match.awayGoals! : match.homeGoals!;
+
+      result.push({
+        matchId: match.id,
+        playerIds,
+        isWin: goalsScored > goalsConceded,
+        isDraw: goalsScored === goalsConceded,
+        goalsScored,
+        goalsConceded,
+      });
+    }
+
+    return result;
+  }
+
+  private calculateCombinationStats(matchDataList: MatchData[]): {
+    pairStats: Map<string, CombinationStatsAccumulator>;
+    trioStats: Map<string, CombinationStatsAccumulator>;
+  } {
+    const pairStats = new Map<string, CombinationStatsAccumulator>();
+    const trioStats = new Map<string, CombinationStatsAccumulator>();
+
+    for (const matchData of matchDataList) {
+      const { playerIds, matchId, isWin, isDraw, goalsScored, goalsConceded } =
+        matchData;
+
+      this.accumulatePairStats(
+        pairStats,
+        playerIds,
+        matchId,
+        isWin,
+        isDraw,
+        goalsScored,
+        goalsConceded,
+      );
+
+      this.accumulateTrioStats(
+        trioStats,
+        playerIds,
+        matchId,
+        isWin,
+        isDraw,
+        goalsScored,
+        goalsConceded,
+      );
+    }
+
+    return { pairStats, trioStats };
+  }
+
+  private accumulatePairStats(
+    stats: Map<string, CombinationStatsAccumulator>,
+    playerIds: string[],
+    matchId: string,
+    isWin: boolean,
+    isDraw: boolean,
+    goalsScored: number,
+    goalsConceded: number,
+  ): void {
+    for (let i = 0; i < playerIds.length; i++) {
+      for (let j = i + 1; j < playerIds.length; j++) {
+        const players = [playerIds[i], playerIds[j]].sort();
+        const key = players.join('-');
+        this.updateCombinationStats(
+          stats,
+          key,
+          players,
+          matchId,
+          isWin,
+          isDraw,
+          goalsScored,
+          goalsConceded,
+        );
+      }
+    }
+  }
+
+  private accumulateTrioStats(
+    stats: Map<string, CombinationStatsAccumulator>,
+    playerIds: string[],
+    matchId: string,
+    isWin: boolean,
+    isDraw: boolean,
+    goalsScored: number,
+    goalsConceded: number,
+  ): void {
+    for (let i = 0; i < playerIds.length; i++) {
+      for (let j = i + 1; j < playerIds.length; j++) {
+        for (let k = j + 1; k < playerIds.length; k++) {
+          const players = [playerIds[i], playerIds[j], playerIds[k]].sort();
+          const key = players.join('-');
+          this.updateCombinationStats(
+            stats,
+            key,
+            players,
+            matchId,
+            isWin,
+            isDraw,
+            goalsScored,
+            goalsConceded,
+          );
+        }
+      }
+    }
+  }
+
+  private updateCombinationStats(
+    stats: Map<string, CombinationStatsAccumulator>,
+    key: string,
+    players: string[],
+    matchId: string,
+    isWin: boolean,
+    isDraw: boolean,
+    goalsScored: number,
+    goalsConceded: number,
+  ): void {
+    if (!stats.has(key)) {
+      stats.set(key, {
+        players,
+        matches: [],
+        wins: 0,
+        draws: 0,
+        losses: 0,
+        goalsScored: 0,
+        goalsConceded: 0,
+      });
+    }
+    const stat = stats.get(key)!;
+    stat.matches.push(matchId);
+    if (isWin) stat.wins++;
+    else if (isDraw) stat.draws++;
+    else stat.losses++;
+    stat.goalsScored += goalsScored;
+    stat.goalsConceded += goalsConceded;
+  }
+
+  private async fetchEvaluationsMap(
+    playerIds: string[],
+    matchIds: string[],
+  ): Promise<Map<string, Evaluation[]>> {
+    if (playerIds.length === 0 || matchIds.length === 0) return new Map();
+
+    const evaluations = await this.evaluationsRepository.find({
+      where: {
+        player: { id: In(playerIds) },
+        match: { id: In(matchIds) },
+      },
+      relations: ['player', 'match'],
+    });
+
+    const map = new Map<string, Evaluation[]>();
+    for (const evaluation of evaluations) {
+      if (!evaluation.match) continue;
+      const key = `${evaluation.player.id}-${evaluation.match.id}`;
+      if (!map.has(key)) {
+        map.set(key, []);
+      }
+      map.get(key)!.push(evaluation);
+    }
+
+    return map;
+  }
+
+  private buildCombinationResults(
+    statsMap: Map<string, CombinationStatsAccumulator>,
+    minMatches: number,
+    playerInfoMap: Map<string, PlayerInfo>,
+    evaluationsMap: Map<string, Evaluation[]>,
+  ): PlayerCombinationStats[] {
+    const results: PlayerCombinationStats[] = [];
+
+    for (const [, stats] of statsMap) {
+      if (stats.matches.length < minMatches) continue;
+
+      const matchesTogether = stats.matches.length;
+      const winRate = Math.round((stats.wins / matchesTogether) * 100);
+      const goalDifference = stats.goalsScored - stats.goalsConceded;
+      const avgGoalDifference =
+        Math.round((goalDifference / matchesTogether) * 100) / 100;
+
+      const avgRating = this.calculateAverageRating(
+        stats.players,
+        stats.matches,
+        evaluationsMap,
+      );
+
+      const chemistryScore = this.calculateChemistryScore(
+        winRate,
+        avgGoalDifference,
+        avgRating,
+      );
+
+      results.push({
+        players: stats.players.map((id) => playerInfoMap.get(id)!),
+        matchesTogether,
+        wins: stats.wins,
+        draws: stats.draws,
+        losses: stats.losses,
+        winRate,
+        goalsScored: stats.goalsScored,
+        goalsConceded: stats.goalsConceded,
+        goalDifference,
+        avgGoalDifference,
+        averageEvaluationRating: avgRating,
+        chemistryScore,
+      });
+    }
+
+    results.sort((a, b) => b.chemistryScore - a.chemistryScore);
+    return results;
+  }
+
+  private calculateAverageRating(
+    playerIds: string[],
+    matchIds: string[],
+    evaluationsMap: Map<string, Evaluation[]>,
+  ): number | null {
+    const allRatings: number[] = [];
+
+    for (const playerId of playerIds) {
+      for (const matchId of matchIds) {
+        const key = `${playerId}-${matchId}`;
+        const evaluations = evaluationsMap.get(key) || [];
+        for (const e of evaluations) {
+          if (e.technical !== null) allRatings.push(e.technical);
+          if (e.tactical !== null) allRatings.push(e.tactical);
+          if (e.physical !== null) allRatings.push(e.physical);
+          if (e.psychological !== null) allRatings.push(e.psychological);
+        }
+      }
+    }
+
+    if (allRatings.length === 0) return null;
+    return (
+      Math.round(
+        (allRatings.reduce((sum, r) => sum + r, 0) / allRatings.length) * 10,
+      ) / 10
+    );
+  }
+
+  private calculateChemistryScore(
+    winRate: number,
+    avgGoalDifference: number,
+    avgRating: number | null,
+  ): number {
+    const normalizedGoalDiff =
+      Math.min(Math.max((avgGoalDifference + 3) / 6, 0), 1) * 100;
+    const normalizedEval = avgRating !== null ? (avgRating / 10) * 100 : 50;
+
+    return (
+      Math.round(
+        (winRate * 0.4 + normalizedGoalDiff * 0.35 + normalizedEval * 0.25) *
+          10,
+      ) / 10
+    );
+  }
+
+  private buildEmptyChemistryResponse(
+    group: Group,
+    period: StatsPeriod,
+    minimumMatches: number,
+  ): TeamChemistryResponse {
+    return {
+      groupId: group.id,
+      groupName: group.name,
+      period,
+      minimumMatches,
+      totalMatchesAnalyzed: 0,
+      bestPairs: [],
+      bestTrios: [],
+      corePlayers: [],
     };
   }
 
