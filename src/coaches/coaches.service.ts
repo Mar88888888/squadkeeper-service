@@ -3,6 +3,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
@@ -15,6 +16,8 @@ import { UpdateCoachDto } from './dto/update-coach.dto';
 
 @Injectable()
 export class CoachesService {
+  private readonly logger = new Logger(CoachesService.name);
+
   constructor(
     @InjectRepository(Coach)
     private coachesRepository: Repository<Coach>,
@@ -57,7 +60,8 @@ export class CoachesService {
           await manager.delete(User, userId);
         }
       });
-    } catch {
+    } catch (error) {
+      this.logger.error('Failed to delete coach', error);
       throw new BadRequestException('Failed to delete coach');
     }
   }
@@ -106,6 +110,7 @@ export class CoachesService {
       if (error instanceof ConflictException) {
         throw error;
       }
+      this.logger.error('Failed to create coach', error);
       throw new BadRequestException('Failed to create coach');
     }
   }
@@ -155,6 +160,7 @@ export class CoachesService {
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;
+      this.logger.error('Failed to update coach', error);
       throw new BadRequestException('Failed to update coach');
     }
   }

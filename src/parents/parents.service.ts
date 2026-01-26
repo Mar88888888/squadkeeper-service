@@ -3,6 +3,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
@@ -16,6 +17,8 @@ import { UpdateParentDto } from './dto/update-parent.dto';
 
 @Injectable()
 export class ParentsService {
+  private readonly logger = new Logger(ParentsService.name);
+
   constructor(
     @InjectRepository(Parent)
     private parentsRepository: Repository<Parent>,
@@ -69,7 +72,8 @@ export class ParentsService {
           await manager.delete(User, userId);
         }
       });
-    } catch {
+    } catch (error) {
+      this.logger.error('Failed to delete parent', error);
       throw new BadRequestException('Failed to delete parent');
     }
   }
@@ -198,6 +202,7 @@ export class ParentsService {
       ) {
         throw error;
       }
+      this.logger.error('Failed to create parent', error);
       throw new BadRequestException('Failed to create parent');
     }
   }
@@ -244,6 +249,7 @@ export class ParentsService {
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;
+      this.logger.error('Failed to update parent', error);
       throw new BadRequestException('Failed to update parent');
     }
   }

@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
@@ -48,6 +49,8 @@ export interface RatingStats {
 
 @Injectable()
 export class EvaluationsService {
+  private readonly logger = new Logger(EvaluationsService.name);
+
   constructor(
     @InjectRepository(Evaluation)
     private evaluationsRepository: Repository<Evaluation>,
@@ -124,6 +127,7 @@ export class EvaluationsService {
       if (error instanceof NotFoundException || error instanceof BadRequestException) {
         throw error;
       }
+      this.logger.error('Failed to create evaluations', error);
       throw new BadRequestException('Failed to create evaluations');
     }
   }

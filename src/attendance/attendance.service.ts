@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, EntityManager, Repository } from 'typeorm';
@@ -20,6 +21,8 @@ import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 @Injectable()
 export class AttendanceService {
+  private readonly logger = new Logger(AttendanceService.name);
+
   constructor(
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
@@ -67,6 +70,7 @@ export class AttendanceService {
       if (error instanceof NotFoundException) {
         throw error;
       }
+      this.logger.error('Failed to mark attendance', error);
       throw new BadRequestException('Failed to mark attendance');
     }
   }

@@ -1,7 +1,7 @@
 import {
   IsEmail,
   IsString,
-  MinLength,
+  IsStrongPassword,
   IsInt,
   IsOptional,
   IsDateString,
@@ -13,8 +13,10 @@ export class UpdateCoachDto {
   email?: string;
 
   @IsOptional()
-  @IsString()
-  @MinLength(6)
+  @IsStrongPassword(
+    { minLength: 8, minLowercase: 1, minUppercase: 1, minNumbers: 1, minSymbols: 0 },
+    { message: 'Password must be at least 8 characters with uppercase, lowercase, and number' },
+  )
   password?: string;
 
   @IsOptional()

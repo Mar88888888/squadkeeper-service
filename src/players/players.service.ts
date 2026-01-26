@@ -3,6 +3,7 @@ import {
   ConflictException,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
@@ -42,6 +43,8 @@ interface AttendanceStats {
 
 @Injectable()
 export class PlayersService {
+  private readonly logger = new Logger(PlayersService.name);
+
   constructor(
     @InjectRepository(Player)
     private playersRepository: Repository<Player>,
@@ -395,7 +398,8 @@ export class PlayersService {
           await manager.delete(User, userId);
         }
       });
-    } catch {
+    } catch (error) {
+      this.logger.error('Failed to delete player', error);
       throw new BadRequestException('Failed to delete player');
     }
   }
@@ -446,6 +450,7 @@ export class PlayersService {
       if (error instanceof ConflictException) {
         throw error;
       }
+      this.logger.error('Failed to create player', error);
       throw new BadRequestException('Failed to create player');
     }
   }
@@ -497,6 +502,7 @@ export class PlayersService {
       });
     } catch (error) {
       if (error instanceof ConflictException) throw error;
+      this.logger.error('Failed to update player', error);
       throw new BadRequestException('Failed to update player');
     }
   }
