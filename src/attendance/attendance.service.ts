@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { Player } from '../players/entities/player.entity';
 import { Training } from '../events/entities/training.entity';
@@ -72,7 +72,7 @@ export class AttendanceService {
   }
 
   private async upsertAttendance(
-    manager: any,
+    manager: EntityManager,
     record: AttendanceRecordDto,
     eventType: EventType,
     eventId: string,

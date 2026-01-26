@@ -2,16 +2,19 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
+import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
+import { UserRole } from '../users/enums/user-role.enum';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
 
 const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
@@ -56,6 +59,8 @@ export class EvaluationsService {
     private trainingsRepository: Repository<Training>,
     @InjectRepository(Match)
     private matchesRepository: Repository<Match>,
+    @InjectRepository(Parent)
+    private parentsRepository: Repository<Parent>,
     private dataSource: DataSource,
   ) {}
 
@@ -124,7 +129,7 @@ export class EvaluationsService {
   }
 
   private async upsertEvaluation(
-    manager: any,
+    manager: EntityManager,
     record: EvaluationRecordDto,
     training: Training | null,
     match: Match | null,
@@ -137,7 +142,7 @@ export class EvaluationsService {
       throw new NotFoundException(`Player with ID ${record.playerId} not found`);
     }
 
-    const attendanceWhere: any = { player: { id: record.playerId } };
+    const attendanceWhere: FindOptionsWhere<Attendance> = { player: { id: record.playerId } };
     if (training) {
       attendanceWhere.training = { id: training.id };
     }
@@ -155,18 +160,18 @@ export class EvaluationsService {
       );
     }
 
-    const whereCondition: any = {
+    const whereCondition: FindOptionsWhere<Evaluation> = {
       player: { id: record.playerId },
     };
     if (training) {
       whereCondition.training = { id: training.id };
     } else {
-      whereCondition.training = null;
+      whereCondition.training = undefined;
     }
     if (match) {
       whereCondition.match = { id: match.id };
     } else {
-      whereCondition.match = null;
+      whereCondition.match = undefined;
     }
 
     const existingEvaluation = await manager.findOne(Evaluation, {
@@ -342,5 +347,174 @@ export class EvaluationsService {
       },
       history,
     };
+  }
+
+  async findByTrainingForUser(
+    trainingId: string,
+    userId: string,
+    role: UserRole,
+  ): Promise<Evaluation[]> {
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.findByTraining(trainingId);
+    }
+
+    const training = await this.trainingsRepository.findOne({
+      where: { id: trainingId },
+      relations: ['group'],
+    });
+    if (!training) {
+      throw new NotFoundException(`Training with ID ${trainingId} not found`);
+    }
+
+    const allEvaluations = await this.findByTraining(trainingId);
+
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['group'],
+      });
+      if (!player || player.group?.id !== training.group.id) {
+        throw new ForbiddenException('You do not have access to this training');
+      }
+      return allEvaluations.filter((e) => e.player.id === player.id);
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children', 'children.group'],
+      });
+      const childrenInGroup = parent?.children?.filter(
+        (child) => child.group?.id === training.group.id,
+      ) || [];
+      if (childrenInGroup.length === 0) {
+        throw new ForbiddenException('You do not have access to this training');
+      }
+      const childIds = childrenInGroup.map((c) => c.id);
+      return allEvaluations.filter((e) => childIds.includes(e.player.id));
+    }
+
+    throw new ForbiddenException('Access denied');
+  }
+
+  async findByMatchForUser(
+    matchId: string,
+    userId: string,
+    role: UserRole,
+  ): Promise<Evaluation[]> {
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.findByMatch(matchId);
+    }
+
+    const match = await this.matchesRepository.findOne({
+      where: { id: matchId },
+      relations: ['group'],
+    });
+    if (!match) {
+      throw new NotFoundException(`Match with ID ${matchId} not found`);
+    }
+
+    const allEvaluations = await this.findByMatch(matchId);
+
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['group'],
+      });
+      if (!player || player.group?.id !== match.group.id) {
+        throw new ForbiddenException('You do not have access to this match');
+      }
+      return allEvaluations.filter((e) => e.player.id === player.id);
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children', 'children.group'],
+      });
+      const childrenInGroup = parent?.children?.filter(
+        (child) => child.group?.id === match.group.id,
+      ) || [];
+      if (childrenInGroup.length === 0) {
+        throw new ForbiddenException('You do not have access to this match');
+      }
+      const childIds = childrenInGroup.map((c) => c.id);
+      return allEvaluations.filter((e) => childIds.includes(e.player.id));
+    }
+
+    throw new ForbiddenException('Access denied');
+  }
+
+  async findByPlayerForUser(
+    playerId: string,
+    userId: string,
+    role: UserRole,
+  ): Promise<Evaluation[]> {
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.findByPlayer(playerId);
+    }
+
+    if (role === UserRole.PLAYER) {
+      const player = await this.playersRepository.findOne({
+        where: { user: { id: userId } },
+      });
+      if (!player || player.id !== playerId) {
+        throw new ForbiddenException('You can only view your own evaluations');
+      }
+      return this.findByPlayer(playerId);
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children'],
+      });
+      const childIds = parent?.children?.map((c) => c.id) || [];
+      if (!childIds.includes(playerId)) {
+        throw new ForbiddenException("You can only view your children's evaluations");
+      }
+      return this.findByPlayer(playerId);
+    }
+
+    throw new ForbiddenException('Access denied');
+  }
+
+  async getRatingStatsForUser(
+    playerId: string,
+    userId: string,
+    role: UserRole,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<RatingStats> {
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.getRatingStats(playerId, startDate, endDate);
+    }
+
+    if (role === UserRole.PARENT) {
+      const parent = await this.parentsRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['children'],
+      });
+      const childIds = parent?.children?.map((c) => c.id) || [];
+      if (!childIds.includes(playerId)) {
+        throw new ForbiddenException("You can only view your children's rating stats");
+      }
+    }
+
+    return this.getRatingStats(playerId, startDate, endDate);
+  }
+
+  async getMyRatingStats(
+    userId: string,
+    startDate?: Date,
+    endDate?: Date,
+  ): Promise<RatingStats> {
+    const player = await this.playersRepository.findOne({
+      where: { user: { id: userId } },
+    });
+    if (!player) {
+      throw new NotFoundException('Player profile not found');
+    }
+    return this.getRatingStats(player.id, startDate, endDate);
   }
 }
