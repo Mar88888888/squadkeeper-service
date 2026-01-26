@@ -26,6 +26,7 @@ import {
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { Position, DEFENSIVE_POSITIONS } from './enums/position.enum';
 import { getDateRangeForPeriod, DateRange } from '../common/utils/date-range.util';
+import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 interface AttendanceStats {
   total: number;
@@ -232,10 +233,7 @@ export class PlayersService {
       }
     }
 
-    const attended = stats.present + stats.late + stats.benched;
-    if (stats.total > 0) {
-      stats.rate = Math.round((attended / stats.total) * 100);
-    }
+    calculateAttendanceRate(stats);
 
     return stats;
   }

@@ -16,6 +16,7 @@ import {
 } from './dto/mark-attendance-batch.dto';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
 import { AttendanceStatus } from './enums/attendance-status.enum';
+import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 @Injectable()
 export class AttendanceService {
@@ -215,10 +216,7 @@ export class AttendanceService {
       }
     });
 
-    const attended = stats.present + stats.late + stats.benched;
-    if (stats.total > 0) {
-      stats.rate = Math.round((attended / stats.total) * 100);
-    }
+    calculateAttendanceRate(stats);
 
     return stats;
   }
@@ -300,10 +298,7 @@ export class AttendanceService {
         }
       });
 
-      const attended = stats.present + stats.late + stats.benched;
-      if (stats.total > 0) {
-        stats.rate = Math.round((attended / stats.total) * 100);
-      }
+      calculateAttendanceRate(stats);
 
       result.push(stats);
     }
