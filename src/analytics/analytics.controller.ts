@@ -78,32 +78,6 @@ export class AnalyticsController {
     );
   }
 
-  @Get('chemistry/my-teams')
-  @Roles(UserRole.COACH, UserRole.ADMIN)
-  getCoachTeamsChemistry(
-    @Request() req: { user: { id: string } },
-    @Query('period') period?: StatsPeriod,
-  ) {
-    return this.analyticsService.getCoachTeamsChemistry(
-      req.user.id,
-      period || StatsPeriod.ALL_TIME,
-    );
-  }
-
-  @Get('chemistry/:groupId')
-  @Roles(UserRole.COACH, UserRole.ADMIN)
-  getTeamChemistry(
-    @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Query('period') period?: StatsPeriod,
-    @Query('minMatches') minMatches?: number,
-  ) {
-    return this.analyticsService.getTeamChemistry(
-      groupId,
-      period || StatsPeriod.ALL_TIME,
-      minMatches || 3,
-    );
-  }
-
   @Get('settings/my-groups')
   @Roles(UserRole.COACH, UserRole.ADMIN)
   getMyGroups(@Request() req: { user: { id: string } }) {
