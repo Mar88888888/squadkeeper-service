@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere, Repository } from 'typeorm';
+import { DataSource, EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
@@ -166,17 +166,9 @@ export class EvaluationsService {
 
     const whereCondition: FindOptionsWhere<Evaluation> = {
       player: { id: record.playerId },
+      training: training ? { id: training.id } : IsNull(),
+      match: match ? { id: match.id } : IsNull(),
     };
-    if (training) {
-      whereCondition.training = { id: training.id };
-    } else {
-      whereCondition.training = undefined;
-    }
-    if (match) {
-      whereCondition.match = { id: match.id };
-    } else {
-      whereCondition.match = undefined;
-    }
 
     const existingEvaluation = await manager.findOne(Evaluation, {
       where: whereCondition,
