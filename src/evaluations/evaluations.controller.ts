@@ -26,7 +26,7 @@ export class EvaluationsController {
   constructor(private readonly evaluationsService: EvaluationsService) {}
 
   @Post('batch')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   @HttpCode(HttpStatus.OK)
   createBatch(
     @Body() dto: CreateEvaluationBatchDto,

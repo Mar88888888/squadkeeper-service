@@ -5,6 +5,15 @@ import { UserRole } from '../../users/enums/user-role.enum';
 import { join } from 'path';
 
 async function seedAdmin() {
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
+
+  if (!adminEmail || !adminPassword) {
+    console.error('Error: ADMIN_EMAIL and ADMIN_PASSWORD environment variables are required.');
+    console.error('Example: ADMIN_EMAIL=admin@myacademy.com ADMIN_PASSWORD=securePass123 npm run seed:admin');
+    process.exit(1);
+  }
+
   console.log('Starting admin seed...');
 
   const dataSource = new DataSource({
@@ -25,7 +34,7 @@ async function seedAdmin() {
     const userRepository = dataSource.getRepository(User);
 
     const existingAdmin = await userRepository.findOne({
-      where: { email: 'admin@football.com' },
+      where: { email: adminEmail },
     });
 
     if (existingAdmin) {
@@ -34,10 +43,10 @@ async function seedAdmin() {
       return;
     }
 
-    const hashedPassword = await bcrypt.hash('admin', 10);
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
 
     const adminUser = userRepository.create({
-      email: 'admin@football.com',
+      email: adminEmail,
       passwordHash: hashedPassword,
       role: UserRole.ADMIN,
       firstName: 'System',
@@ -46,8 +55,7 @@ async function seedAdmin() {
 
     await userRepository.save(adminUser);
     console.log('Admin user created successfully!');
-    console.log('Email: admin@football.com');
-    console.log('Password: admin');
+    console.log('Email:', adminEmail);
     console.log('Role: ADMIN');
   } catch (error) {
     console.error('Error during admin seed:', error);

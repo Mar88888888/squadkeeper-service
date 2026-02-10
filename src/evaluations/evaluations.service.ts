@@ -105,7 +105,7 @@ export class EvaluationsService {
           where: { user: { id: coachUserId } },
         });
         if (!coach) {
-          throw new NotFoundException('Coach profile not found');
+          throw new BadRequestException('Only coaches can create evaluations. Admin users need a coach profile to evaluate players.');
         }
 
         const results: Evaluation[] = [];
