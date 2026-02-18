@@ -23,10 +23,14 @@ import {
   PlayerStatsResponse,
   TeamStatsResponse,
   ChildrenStatsResponse,
+  ChildInfo,
 } from './dto/player-stats.dto';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { Position, DEFENSIVE_POSITIONS } from './enums/position.enum';
-import { getDateRangeForPeriod, DateRange } from '../common/utils/date-range.util';
+import {
+  getDateRangeForPeriod,
+  DateRange,
+} from '../common/utils/date-range.util';
 import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 interface AttendanceStats {
@@ -326,40 +330,44 @@ export class PlayersService {
 
   async getChildrenStats(
     userId: string,
-    childId?: string,
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<ChildrenStatsResponse> {
-    const parent = await this.parentsRepository
-      .createQueryBuilder('parent')
-      .innerJoin('parent.user', 'user')
-      .leftJoinAndSelect('parent.children', 'children')
-      .where('user.id = :userId', { userId })
-      .getOne();
+    const parent = await this.parentsRepository.findOne({
+      relations: ['user', 'children', 'children.group'],
+      where: {
+        user: {
+          id: userId,
+        },
+      },
+      order: {
+        children: {
+          firstName: 'ASC',
+        },
+      },
+    });
 
     if (!parent) {
       throw new NotFoundException('Parent profile not found');
     }
 
-    const children = parent.children.map((child) => ({
-      id: child.id,
-      firstName: child.firstName,
-      lastName: child.lastName,
-    }));
+    const children: ChildInfo[] = await Promise.all(
+      parent.children.map(async (child): Promise<ChildInfo> => {
+        const stats = await this.getPlayerStats(child.id, period);
+        return {
+          id: child.id,
+          firstName: child.firstName,
+          lastName: child.lastName,
+          groupId: child.group?.id || null,
+          stats: stats || null,
+        };
+      }),
+    );
 
     if (children.length === 0) {
-      return { children: [], stats: null };
+      return { children: [] };
     }
 
-    const selectedChildId = childId || children[0].id;
-
-    const isValidChild = children.some((c) => c.id === selectedChildId);
-    if (!isValidChild) {
-      throw new BadRequestException('Child does not belong to this parent');
-    }
-
-    const stats = await this.getPlayerStats(selectedChildId, period);
-
-    return { children, stats };
+    return { children };
   }
 
   async findAll(): Promise<Player[]> {
@@ -471,7 +479,9 @@ export class PlayersService {
 
         if (player.user) {
           if (email !== undefined && email !== player.user.email) {
-            const existingUser = await manager.findOne(User, { where: { email } });
+            const existingUser = await manager.findOne(User, {
+              where: { email },
+            });
             if (existingUser) {
               throw new ConflictException('Email already exists');
             }
@@ -489,12 +499,18 @@ export class PlayersService {
 
         if (firstName !== undefined) player.firstName = firstName;
         if (lastName !== undefined) player.lastName = lastName;
-        if (updatePlayerDto.phoneNumber !== undefined) player.phoneNumber = updatePlayerDto.phoneNumber;
-        if (updatePlayerDto.dateOfBirth !== undefined) player.dateOfBirth = new Date(updatePlayerDto.dateOfBirth);
-        if (updatePlayerDto.position !== undefined) player.position = updatePlayerDto.position;
-        if (updatePlayerDto.height !== undefined) player.height = updatePlayerDto.height;
-        if (updatePlayerDto.weight !== undefined) player.weight = updatePlayerDto.weight;
-        if (updatePlayerDto.strongFoot !== undefined) player.strongFoot = updatePlayerDto.strongFoot;
+        if (updatePlayerDto.phoneNumber !== undefined)
+          player.phoneNumber = updatePlayerDto.phoneNumber;
+        if (updatePlayerDto.dateOfBirth !== undefined)
+          player.dateOfBirth = new Date(updatePlayerDto.dateOfBirth);
+        if (updatePlayerDto.position !== undefined)
+          player.position = updatePlayerDto.position;
+        if (updatePlayerDto.height !== undefined)
+          player.height = updatePlayerDto.height;
+        if (updatePlayerDto.weight !== undefined)
+          player.weight = updatePlayerDto.weight;
+        if (updatePlayerDto.strongFoot !== undefined)
+          player.strongFoot = updatePlayerDto.strongFoot;
 
         await manager.save(player);
 

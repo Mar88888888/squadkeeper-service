@@ -22,6 +22,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 
 @Controller('players')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -37,10 +39,10 @@ export class PlayersController {
   @Get('stats/my')
   @Roles(UserRole.PLAYER)
   async getMyStats(
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ) {
-    const player = await this.playersService.findPlayerByUserId(req.user.id);
+    const player = await this.playersService.findPlayerByUserId(user.id);
     return this.playersService.getPlayerStats(
       player.id,
       period || StatsPeriod.ALL_TIME,
@@ -50,11 +52,11 @@ export class PlayersController {
   @Get('stats/team')
   @Roles(UserRole.COACH, UserRole.ADMIN)
   getTeamStats(
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ) {
     return this.playersService.getTeamStats(
-      req.user.id,
+      user.id,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -62,13 +64,11 @@ export class PlayersController {
   @Get('stats/children')
   @Roles(UserRole.PARENT)
   getChildrenStats(
-    @Request() req: { user: { id: string } },
-    @Query('childId') childId?: string,
+    @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ): Promise<ChildrenStatsResponse> {
     return this.playersService.getChildrenStats(
-      req.user.id,
-      childId,
+      user.id,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -79,7 +79,10 @@ export class PlayersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('period') period?: StatsPeriod,
   ) {
-    return this.playersService.getPlayerStats(id, period || StatsPeriod.ALL_TIME);
+    return this.playersService.getPlayerStats(
+      id,
+      period || StatsPeriod.ALL_TIME,
+    );
   }
 
   @Post()

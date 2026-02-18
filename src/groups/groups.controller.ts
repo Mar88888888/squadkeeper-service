@@ -21,6 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -41,8 +43,8 @@ export class GroupsController {
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  findMyGroups(@Request() req: { user: { id: string; role: UserRole } }) {
-    return this.groupsService.findMyGroups(req.user.id, req.user.role);
+  findMyGroups(@CurrentUser() user: AuthenticatedUser) {
+    return this.groupsService.findMyGroups(user.id, user.role);
   }
 
   @Get(':id')

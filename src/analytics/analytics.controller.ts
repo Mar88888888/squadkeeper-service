@@ -16,11 +16,16 @@ import {
 import { AnalyticsService } from './analytics.service';
 import { PerformanceSettingsService } from './performance-settings.service';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
-import { UpdatePerformanceSettingsDto, CopySettingsDto } from './dto/performance-settings.dto';
+import {
+  UpdatePerformanceSettingsDto,
+  CopySettingsDto,
+} from './dto/performance-settings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 
 @Controller('analytics')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -33,11 +38,11 @@ export class AnalyticsController {
   @Get('performance-score/my')
   @Roles(UserRole.PLAYER)
   getMyPerformanceScore(
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ) {
     return this.analyticsService.getMyPerformanceScore(
-      req.user.id,
+      user.id,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -45,11 +50,11 @@ export class AnalyticsController {
   @Get('performance-score/team')
   @Roles(UserRole.COACH, UserRole.ADMIN)
   getCoachTeamsPerformanceScores(
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ) {
     return this.analyticsService.getCoachTeamsPerformanceScores(
-      req.user.id,
+      user.id,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -80,8 +85,8 @@ export class AnalyticsController {
 
   @Get('settings/my-groups')
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  getMyGroups(@Request() req: { user: { id: string } }) {
-    return this.performanceSettingsService.getCoachGroups(req.user.id);
+  getMyGroups(@CurrentUser() user: AuthenticatedUser) {
+    return this.performanceSettingsService.getCoachGroups(user.id);
   }
 
   @Get('settings/:groupId')
@@ -94,12 +99,12 @@ export class AnalyticsController {
   @Roles(UserRole.COACH, UserRole.ADMIN)
   updateSettings(
     @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: UpdatePerformanceSettingsDto,
   ) {
     return this.performanceSettingsService.updateSettings(
       groupId,
-      req.user.id,
+      user.id,
       dto,
     );
   }
@@ -109,22 +114,22 @@ export class AnalyticsController {
   @HttpCode(HttpStatus.OK)
   resetSettings(
     @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.performanceSettingsService.resetSettings(groupId, req.user.id);
+    return this.performanceSettingsService.resetSettings(groupId, user.id);
   }
 
   @Post('settings/:groupId/copy')
   @Roles(UserRole.COACH, UserRole.ADMIN)
   copySettings(
     @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Request() req: { user: { id: string } },
+    @CurrentUser() user: AuthenticatedUser,
     @Body() dto: CopySettingsDto,
   ) {
     return this.performanceSettingsService.copySettings(
       groupId,
       dto.sourceGroupId,
-      req.user.id,
+      user.id,
     );
   }
 }

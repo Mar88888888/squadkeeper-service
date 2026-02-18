@@ -4,7 +4,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Squad } from './entities/squad.entity';
 import { SquadPosition } from './entities/squad-position.entity';
 import { Group } from '../groups/entities/group.entity';
@@ -14,6 +14,7 @@ import { CreateSquadDto } from './dto/create-squad.dto';
 import { UpdateSquadDto } from './dto/update-squad.dto';
 import { UpdatePositionsDto } from './dto/update-positions.dto';
 import { UserRole } from '../users/enums/user-role.enum';
+import { Position } from '../players/enums/position.enum';
 
 @Injectable()
 export class SquadsService {
@@ -50,9 +51,7 @@ export class SquadsService {
         createSquadDto.groupId,
       );
       if (!hasAccess) {
-        throw new ForbiddenException(
-          'You do not have access to this group',
-        );
+        throw new ForbiddenException('You do not have access to this group');
       }
     }
 
@@ -94,7 +93,13 @@ export class SquadsService {
   async findOne(id: string): Promise<Squad> {
     const squad = await this.squadsRepository.findOne({
       where: { id },
-      relations: ['group', 'group.players', 'createdBy', 'positions', 'positions.player'],
+      relations: [
+        'group',
+        'group.players',
+        'createdBy',
+        'positions',
+        'positions.player',
+      ],
     });
 
     if (!squad) {
@@ -189,7 +194,7 @@ export class SquadsService {
       const position = this.positionsRepository.create({
         squad,
         player,
-        role: posData.role as any,
+        role: posData.role as Position,
         isStarter: posData.isStarter,
         orderIndex: posData.orderIndex,
       });

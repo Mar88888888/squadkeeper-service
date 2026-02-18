@@ -21,6 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 
 @Controller('squads')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -31,11 +33,11 @@ export class SquadsController {
   @Roles(UserRole.ADMIN, UserRole.COACH)
   create(
     @Body() createSquadDto: CreateSquadDto,
-    @Request() req: { user: { id: string; role: UserRole } },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.squadsService.create(createSquadDto, {
-      userId: req.user.id,
-      role: req.user.role,
+      userId: user.id,
+      role: user.role,
     });
   }
 

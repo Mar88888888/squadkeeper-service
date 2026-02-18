@@ -36,9 +36,10 @@ export interface ChildInfo {
   id: string;
   firstName: string;
   lastName: string;
+  groupId: string | null;
+  stats: PlayerStatsResponse | null;
 }
 
 export interface ChildrenStatsResponse {
   children: ChildInfo[];
-  stats: PlayerStatsResponse | null;
 }

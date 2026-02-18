@@ -25,6 +25,8 @@ import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('attendance')
 export class AttendanceController {
@@ -53,9 +55,9 @@ export class AttendanceController {
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   async getTrainingAttendance(
     @Param('id') id: string,
-    @Request() req: { user: { id: string; role: UserRole } },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    const { id: userId, role } = req.user;
+    const { id: userId, role } = user;
 
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.attendanceService.findByEvent(id, EventType.TRAINING);
@@ -77,7 +79,11 @@ export class AttendanceController {
       if (!player || player.group?.id !== training.group.id) {
         throw new ForbiddenException('You do not have access to this training');
       }
-      return this.attendanceService.findByEventForPlayers(id, EventType.TRAINING, [player.id]);
+      return this.attendanceService.findByEventForPlayers(
+        id,
+        EventType.TRAINING,
+        [player.id],
+      );
     }
 
     if (role === UserRole.PARENT) {
@@ -85,14 +91,19 @@ export class AttendanceController {
         where: { user: { id: userId } },
         relations: ['children', 'children.group'],
       });
-      const childrenInGroup = parent?.children?.filter(
-        (child) => child.group?.id === training.group.id,
-      ) || [];
+      const childrenInGroup =
+        parent?.children?.filter(
+          (child) => child.group?.id === training.group.id,
+        ) || [];
       if (childrenInGroup.length === 0) {
         throw new ForbiddenException('You do not have access to this training');
       }
       const childIds = childrenInGroup.map((c) => c.id);
-      return this.attendanceService.findByEventForPlayers(id, EventType.TRAINING, childIds);
+      return this.attendanceService.findByEventForPlayers(
+        id,
+        EventType.TRAINING,
+        childIds,
+      );
     }
 
     throw new ForbiddenException('Access denied');
@@ -103,9 +114,9 @@ export class AttendanceController {
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   async getMatchAttendance(
     @Param('id') id: string,
-    @Request() req: { user: { id: string; role: UserRole } },
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    const { id: userId, role } = req.user;
+    const { id: userId, role } = user;
 
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
       return this.attendanceService.findByEvent(id, EventType.MATCH);
@@ -127,7 +138,9 @@ export class AttendanceController {
       if (!player || player.group?.id !== match.group.id) {
         throw new ForbiddenException('You do not have access to this match');
       }
-      return this.attendanceService.findByEventForPlayers(id, EventType.MATCH, [player.id]);
+      return this.attendanceService.findByEventForPlayers(id, EventType.MATCH, [
+        player.id,
+      ]);
     }
 
     if (role === UserRole.PARENT) {
@@ -135,14 +148,19 @@ export class AttendanceController {
         where: { user: { id: userId } },
         relations: ['children', 'children.group'],
       });
-      const childrenInGroup = parent?.children?.filter(
-        (child) => child.group?.id === match.group.id,
-      ) || [];
+      const childrenInGroup =
+        parent?.children?.filter(
+          (child) => child.group?.id === match.group.id,
+        ) || [];
       if (childrenInGroup.length === 0) {
         throw new ForbiddenException('You do not have access to this match');
       }
       const childIds = childrenInGroup.map((c) => c.id);
-      return this.attendanceService.findByEventForPlayers(id, EventType.MATCH, childIds);
+      return this.attendanceService.findByEventForPlayers(
+        id,
+        EventType.MATCH,
+        childIds,
+      );
     }
 
     throw new ForbiddenException('Access denied');
@@ -151,8 +169,8 @@ export class AttendanceController {
   @Get('my/stats')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.PLAYER, UserRole.PARENT)
-  async getMyStats(@Request() req: { user: { id: string; role: UserRole } }) {
-    const { id: userId, role } = req.user;
+  async getMyStats(@CurrentUser() user: AuthenticatedUser) {
+    const { id: userId, role } = user;
 
     if (role === UserRole.PLAYER) {
       const player = await this.playersRepository.findOne({

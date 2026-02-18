@@ -21,6 +21,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 
 @Controller('matches')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -43,10 +45,10 @@ export class MatchesController {
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   findMyMatches(
-    @Request() req: { user: { id: string; role: UserRole } },
+    @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterMatchesDto,
   ) {
-    return this.matchesService.findMyMatches(req.user.id, req.user.role, filters);
+    return this.matchesService.findMyMatches(user.id, user.role, filters);
   }
 
   @Get(':id')
