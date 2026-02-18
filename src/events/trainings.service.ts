@@ -1,19 +1,22 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Training } from './entities/training.entity';
 import { Group } from '../groups/entities/group.entity';
 import { CreateTrainingDto } from './dto/create-training.dto';
+import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { buildDateFilter } from '../common/utils/date-filter.util';
 
 @Injectable()
 export class TrainingsService {
+  private readonly logger = new Logger(TrainingsService.name);
+
   constructor(
     @InjectRepository(Training)
     private trainingsRepository: Repository<Training>,
@@ -32,42 +35,45 @@ export class TrainingsService {
       );
     }
 
-    if (createTrainingDto.endTime <= createTrainingDto.startTime) {
-      throw new BadRequestException('endTime must be after startTime');
-    }
-
     const training = this.trainingsRepository.create({
       ...createTrainingDto,
       group,
     });
 
-    return await this.trainingsRepository.save(training);
+    const saved = await this.trainingsRepository.save(training);
+    this.logger.log(`Training created: ${saved.id} for group ${group.id}`);
+    return saved;
   }
 
   async findAll(filters: FilterTrainingsDto = {}): Promise<Training[]> {
     const dateFilter = buildDateFilter(filters);
 
-    return await this.trainingsRepository.find({
+    return this.trainingsRepository.find({
       where: dateFilter,
       relations: ['group'],
       order: { startTime: 'ASC' },
+      skip: filters.skip,
+      take: filters.take,
     });
   }
 
   async findByGroup(groupId: string): Promise<Training[]> {
-    const group = await this.groupsRepository.findOne({
-      where: { id: groupId },
-    });
-
-    if (!group) {
-      throw new NotFoundException(`Group with id ${groupId} not found`);
-    }
-
-    return await this.trainingsRepository.find({
+    const trainings = await this.trainingsRepository.find({
       where: { group: { id: groupId } },
       relations: ['group'],
       order: { startTime: 'ASC' },
     });
+
+    if (trainings.length === 0) {
+      const groupExists = await this.groupsRepository.exists({
+        where: { id: groupId },
+      });
+      if (!groupExists) {
+        throw new NotFoundException(`Group with id ${groupId} not found`);
+      }
+    }
+
+    return trainings;
   }
 
   async findOne(id: string): Promise<Training> {
@@ -95,13 +101,48 @@ export class TrainingsService {
 
     const dateFilter = buildDateFilter(filters);
 
-    return await this.trainingsRepository.find({
+    return this.trainingsRepository.find({
       where: {
         group: { id: In(groupIds) },
         ...dateFilter,
       },
       relations: ['group'],
       order: { startTime: 'ASC' },
+      skip: filters.skip,
+      take: filters.take,
     });
+  }
+
+  async update(id: string, updateTrainingDto: UpdateTrainingDto): Promise<Training> {
+    const training = await this.findOne(id);
+
+    if (updateTrainingDto.groupId && updateTrainingDto.groupId !== training.group.id) {
+      const group = await this.groupsRepository.findOne({
+        where: { id: updateTrainingDto.groupId },
+      });
+      if (!group) {
+        throw new NotFoundException(
+          `Group with id ${updateTrainingDto.groupId} not found`,
+        );
+      }
+      training.group = group;
+    }
+
+    Object.assign(training, {
+      startTime: updateTrainingDto.startTime ?? training.startTime,
+      durationMinutes: updateTrainingDto.durationMinutes ?? training.durationMinutes,
+      location: updateTrainingDto.location ?? training.location,
+      topic: updateTrainingDto.topic !== undefined ? updateTrainingDto.topic : training.topic,
+    });
+
+    const saved = await this.trainingsRepository.save(training);
+    this.logger.log(`Training updated: ${saved.id}`);
+    return saved;
+  }
+
+  async remove(id: string): Promise<void> {
+    const training = await this.findOne(id);
+    await this.trainingsRepository.remove(training);
+    this.logger.log(`Training deleted: ${id}`);
   }
 }

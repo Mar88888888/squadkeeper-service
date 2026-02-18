@@ -10,8 +10,8 @@ export class Training extends BaseEntity {
   @Column({ type: 'timestamptz' })
   startTime: Date;
 
-  @Column({ type: 'timestamptz' })
-  endTime: Date;
+  @Column({ type: 'smallint' })
+  durationMinutes: number;
 
   @Column()
   location: string;

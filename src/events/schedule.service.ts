@@ -124,7 +124,6 @@ export class ScheduleService {
 
           trainingsToCreate.push({
             startTime,
-            endTime,
             location: scheduleItem.location,
             topic: dto.defaultTopic,
             group,
@@ -180,7 +179,9 @@ export class ScheduleService {
   }
 
   private async validateGroup(groupId: string): Promise<Group> {
-    const group = await this.groupRepository.findOne({ where: { id: groupId } });
+    const group = await this.groupRepository.findOne({
+      where: { id: groupId },
+    });
     if (!group) {
       throw new NotFoundException(`Group with ID ${groupId} not found`);
     }

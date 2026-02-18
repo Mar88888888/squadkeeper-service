@@ -3,16 +3,19 @@ import {
   Post,
   Body,
   Get,
+  Patch,
+  Delete,
   Param,
   Query,
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
+  ParseUUIDPipe,
   ForbiddenException,
 } from '@nestjs/common';
 import { TrainingsService } from './trainings.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
+import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -33,7 +36,18 @@ export class TrainingsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  create(@Body() createTrainingDto: CreateTrainingDto) {
+  create(
+    @Body() createTrainingDto: CreateTrainingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (
+      user.role !== UserRole.ADMIN &&
+      !user.groupIds?.includes(createTrainingDto.groupId)
+    ) {
+      throw new ForbiddenException(
+        'You can only create trainings for your own groups',
+      );
+    }
     return this.trainingsService.create(createTrainingDto);
   }
 
@@ -58,14 +72,22 @@ export class TrainingsController {
 
   @Get('group/:groupId')
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  findByGroup(@Param('groupId') groupId: string) {
+  findByGroup(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (user.role !== UserRole.ADMIN && !user.groupIds?.includes(groupId)) {
+      throw new ForbiddenException(
+        'You can only view trainings for your own groups',
+      );
+    }
     return this.trainingsService.findByGroup(groupId);
   }
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   async findOne(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const training = await this.trainingsService.findOne(id);
@@ -75,5 +97,52 @@ export class TrainingsController {
     }
 
     return training;
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  async update(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() updateTrainingDto: UpdateTrainingDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const training = await this.trainingsService.findOne(id);
+
+    if (!this.permissionsService.checkTrainingAccess(user, training)) {
+      throw new ForbiddenException(
+        'You can only update trainings for your own groups',
+      );
+    }
+
+    if (
+      updateTrainingDto.groupId &&
+      updateTrainingDto.groupId !== training.group.id &&
+      user.role !== UserRole.ADMIN &&
+      !user.groupIds?.includes(updateTrainingDto.groupId)
+    ) {
+      throw new ForbiddenException(
+        'You can only move trainings to your own groups',
+      );
+    }
+
+    return this.trainingsService.update(id, updateTrainingDto);
+  }
+
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Roles(UserRole.COACH, UserRole.ADMIN)
+  async remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const training = await this.trainingsService.findOne(id);
+
+    if (!this.permissionsService.checkTrainingAccess(user, training)) {
+      throw new ForbiddenException(
+        'You can only delete trainings for your own groups',
+      );
+    }
+
+    return this.trainingsService.remove(id);
   }
 }
