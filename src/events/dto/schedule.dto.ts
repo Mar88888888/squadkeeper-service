@@ -9,6 +9,7 @@ import {
   Max,
   Matches,
   ValidateNested,
+  ArrayMinSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
@@ -19,30 +20,28 @@ export class ScheduleItemDto {
   dayOfWeek: number;
 
   @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'startTime must be in HH:mm format',
+  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/, {
+    message: 'startTime must be in HH:mm or HH:mm:ss format',
   })
   startTime: string;
 
-  @IsString()
-  @Matches(/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/, {
-    message: 'endTime must be in HH:mm format',
-  })
-  endTime: string;
+  @IsInt()
+  @Min(15)
+  @Max(300)
+  durationMinutes: number;
 
   @IsString()
   @IsNotEmpty()
   location: string;
 }
 
-export class UpdateScheduleDto {
+export class ApplyScheduleDto {
   @IsArray()
+  @ArrayMinSize(1, { message: 'At least one schedule day is required' })
   @ValidateNested({ each: true })
   @Type(() => ScheduleItemDto)
   items: ScheduleItemDto[];
-}
 
-export class GenerateTrainingsDto {
   @IsDateString()
   fromDate: string;
 

@@ -12,7 +12,6 @@ import {
   PerformanceSettings,
   PositionExpectations,
 } from './entities/performance-settings.entity';
-import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { getDateRangeForPeriod } from '../common/utils/date-range.util';
 import { Position } from '../players/enums/position.enum';
@@ -26,8 +25,6 @@ import {
   PerformanceScoreComponents,
   PerformanceWeights,
 } from './dto/performance-score.dto';
-
-const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
 interface CalculationSettings {
   skillWeight: number;
@@ -284,7 +281,7 @@ export class AnalyticsService {
       .select(['a.id', 'm.homeGoals', 'm.awayGoals', 'm.isHome'])
       .where('a.player.id = :playerId', { playerId })
       .andWhere('a.match IS NOT NULL')
-      .andWhere('a.status IN (:...statuses)', { statuses: PLAYED_STATUSES })
+      .andWhere('a.isPresent = true')
       .andWhere('m.homeGoals IS NOT NULL')
       .andWhere('m.awayGoals IS NOT NULL');
 
@@ -352,7 +349,7 @@ export class AnalyticsService {
       .innerJoin('a.match', 'm')
       .where('a.player.id = :playerId', { playerId })
       .andWhere('a.match IS NOT NULL')
-      .andWhere('a.status IN (:...statuses)', { statuses: PLAYED_STATUSES })
+      .andWhere('a.isPresent = true')
       .andWhere('m.homeGoals IS NOT NULL')
       .andWhere('m.awayGoals IS NOT NULL')
       .andWhere(

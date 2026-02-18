@@ -16,7 +16,6 @@ import { Coach } from '../coaches/entities/coach.entity';
 import { Group } from '../groups/entities/group.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { UserRole } from '../users/enums/user-role.enum';
-import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import {
@@ -36,10 +35,7 @@ import { calculateAttendanceRate } from '../common/utils/attendance.util';
 interface AttendanceStats {
   total: number;
   present: number;
-  late: number;
-  benched: number;
   absent: number;
-  sick: number;
   rate: number;
   totalTrainings: number;
   totalMatches: number;
@@ -100,9 +96,7 @@ export class PlayersService {
       .innerJoin('a.match', 'm')
       .where('a.player.id = :playerId', { playerId })
       .andWhere('a.match IS NOT NULL')
-      .andWhere('a.status IN (:...statuses)', {
-        statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
-      });
+      .andWhere('a.isPresent = true');
 
     if (dateRange.start && dateRange.end) {
       query.andWhere('m.startTime BETWEEN :start AND :end', {
@@ -167,9 +161,7 @@ export class PlayersService {
       .innerJoin('a.match', 'm')
       .where('a.player.id = :playerId', { playerId })
       .andWhere('a.match IS NOT NULL')
-      .andWhere('a.status IN (:...statuses)', {
-        statuses: [AttendanceStatus.PRESENT, AttendanceStatus.LATE],
-      })
+      .andWhere('a.isPresent = true')
       .andWhere('m.homeGoals IS NOT NULL')
       .andWhere('m.awayGoals IS NOT NULL')
       .andWhere(
@@ -208,10 +200,7 @@ export class PlayersService {
     const stats: AttendanceStats = {
       total: allAttendances.length,
       present: 0,
-      late: 0,
-      benched: 0,
       absent: 0,
-      sick: 0,
       rate: 0,
       totalTrainings: 0,
       totalMatches: 0,
@@ -221,22 +210,10 @@ export class PlayersService {
       if (a.training) stats.totalTrainings++;
       if (a.match) stats.totalMatches++;
 
-      switch (a.status) {
-        case AttendanceStatus.PRESENT:
-          stats.present++;
-          break;
-        case AttendanceStatus.LATE:
-          stats.late++;
-          break;
-        case AttendanceStatus.BENCHED:
-          stats.benched++;
-          break;
-        case AttendanceStatus.ABSENT:
-          stats.absent++;
-          break;
-        case AttendanceStatus.SICK:
-          stats.sick++;
-          break;
+      if (a.isPresent) {
+        stats.present++;
+      } else {
+        stats.absent++;
       }
     }
 

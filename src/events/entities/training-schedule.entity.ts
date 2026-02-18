@@ -10,8 +10,8 @@ export class TrainingSchedule extends BaseEntity {
   @Column({ type: 'time' })
   startTime: string;
 
-  @Column({ type: 'time' })
-  endTime: string;
+  @Column({ type: 'int' })
+  durationMinutes: number;
 
   @Column()
   location: string;

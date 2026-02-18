@@ -14,11 +14,8 @@ import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
-import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
-
-const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
 const DEFAULT_RATING = 5;
 
@@ -158,7 +155,7 @@ export class EvaluationsService {
       where: attendanceWhere,
     });
 
-    if (!attendance || !PLAYED_STATUSES.includes(attendance.status)) {
+    if (!attendance || !attendance.isPresent) {
       throw new BadRequestException(
         `Cannot evaluate player ${player.firstName} ${player.lastName} - they did not play in this event`,
       );

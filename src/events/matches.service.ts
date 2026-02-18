@@ -13,7 +13,6 @@ import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
 import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
-import { AttendanceStatus } from '../attendance/enums/attendance-status.enum';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto } from './dto/filter-matches.dto';
@@ -21,8 +20,6 @@ import { AddGoalDto } from './dto/add-goal.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MatchType } from './enums/match-type.enum';
 import { buildDateFilter } from '../common/utils/date-filter.util';
-
-const PLAYED_STATUSES = [AttendanceStatus.PRESENT, AttendanceStatus.LATE];
 
 @Injectable()
 export class MatchesService {
@@ -56,7 +53,7 @@ export class MatchesService {
       },
     });
 
-    if (!attendance || !PLAYED_STATUSES.includes(attendance.status)) {
+    if (!attendance || !attendance.isPresent) {
       throw new BadRequestException(
         `Cannot record ${role} for ${playerName} - player was not present at this match`,
       );

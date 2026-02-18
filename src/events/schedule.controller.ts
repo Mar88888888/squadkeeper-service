@@ -2,17 +2,14 @@ import {
   Controller,
   Get,
   Put,
-  Post,
-  Delete,
   Body,
   Param,
+  Query,
   ParseUUIDPipe,
   UseGuards,
-  HttpCode,
-  HttpStatus,
 } from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
-import { UpdateScheduleDto, GenerateTrainingsDto } from './dto/schedule.dto';
+import { ApplyScheduleDto } from './dto/schedule.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -29,30 +26,22 @@ export class ScheduleController {
     return this.scheduleService.getSchedule(groupId);
   }
 
+  @Get('preview')
+  @Roles(UserRole.ADMIN, UserRole.COACH)
+  getTrainingsInRange(
+    @Param('groupId', ParseUUIDPipe) groupId: string,
+    @Query('fromDate') fromDate: string,
+    @Query('toDate') toDate: string,
+  ) {
+    return this.scheduleService.getTrainingsInRange(groupId, fromDate, toDate);
+  }
+
   @Put()
   @Roles(UserRole.ADMIN, UserRole.COACH)
-  updateSchedule(
+  applySchedule(
     @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Body() dto: UpdateScheduleDto,
+    @Body() dto: ApplyScheduleDto,
   ) {
-    return this.scheduleService.updateSchedule(groupId, dto);
-  }
-
-  @Post('generate')
-  @HttpCode(HttpStatus.OK)
-  @Roles(UserRole.ADMIN, UserRole.COACH)
-  generateTrainings(
-    @Param('groupId', ParseUUIDPipe) groupId: string,
-    @Body() dto: GenerateTrainingsDto,
-  ) {
-    return this.scheduleService.generateTrainings(groupId, dto);
-  }
-
-  @Delete('trainings')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
-  deleteFutureGeneratedTrainings(
-    @Param('groupId', ParseUUIDPipe) groupId: string,
-  ) {
-    return this.scheduleService.deleteFutureGeneratedTrainings(groupId);
+    return this.scheduleService.applySchedule(groupId, dto);
   }
 }

@@ -1,12 +1,11 @@
-import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
-import { AttendanceStatus } from '../enums/attendance-status.enum';
+import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class AttendanceRecordDto {
   @IsUUID()
   playerId: string;
 
-  @IsEnum(AttendanceStatus)
-  status: AttendanceStatus;
+  @IsBoolean()
+  isPresent: boolean;
 
   @IsOptional()
   @IsString()

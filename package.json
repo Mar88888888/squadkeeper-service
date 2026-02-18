@@ -21,7 +21,9 @@
     "seed:admin": "ts-node src/database/seeds/seed-admin.ts",
     "seed:test-data": "ts-node src/database/seeds/seed-test-data.ts",
     "migrate:player-enums": "ts-node src/database/migrations/migrate-player-enums.ts",
-    "migrate:training-duration": "ts-node src/database/migrations/migrate-training-duration.ts"
+    "migrate:training-duration": "ts-node src/database/migrations/migrate-training-duration.ts",
+    "migrate:attendance-boolean": "ts-node src/database/migrations/migrate-attendance-boolean.ts",
+    "migrate:schedule-duration": "ts-node src/database/migrations/migrate-schedule-duration.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

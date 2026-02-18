@@ -4,10 +4,7 @@ import { StatsPeriod } from '../../common/enums/stats-period.enum';
 export interface AttendanceBreakdown {
   total: number;
   present: number;
-  late: number;
-  benched: number;
   absent: number;
-  sick: number;
   rate: number;
   totalTrainings: number;
   totalMatches: number;

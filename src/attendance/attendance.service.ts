@@ -16,8 +16,6 @@ import {
   EventType,
 } from './dto/mark-attendance-batch.dto';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
-import { AttendanceStatus } from './enums/attendance-status.enum';
-import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 @Injectable()
 export class AttendanceService {
@@ -101,26 +99,30 @@ export class AttendanceService {
     });
 
     if (existingAttendance) {
-      existingAttendance.status = record.status;
+      existingAttendance.isPresent = record.isPresent;
       existingAttendance.notes = record.notes || null;
       const savedAttendance = await manager.save(existingAttendance);
 
-      if (
-        eventType === EventType.TRAINING &&
-        record.status !== AttendanceStatus.PRESENT &&
-        record.status !== AttendanceStatus.LATE
-      ) {
-        await manager.delete(Evaluation, {
-          player: { id: record.playerId },
-          training: { id: eventId },
-        });
+      // Delete evaluation if player is marked absent
+      if (!record.isPresent) {
+        if (eventType === EventType.TRAINING) {
+          await manager.delete(Evaluation, {
+            player: { id: record.playerId },
+            training: { id: eventId },
+          });
+        } else {
+          await manager.delete(Evaluation, {
+            player: { id: record.playerId },
+            match: { id: eventId },
+          });
+        }
       }
 
       return savedAttendance;
     } else {
       const attendanceData: Partial<Attendance> = {
         player,
-        status: record.status,
+        isPresent: record.isPresent,
         notes: record.notes || null,
       };
 
@@ -170,9 +172,6 @@ export class AttendanceService {
     total: number;
     present: number;
     absent: number;
-    late: number;
-    sick: number;
-    benched: number;
     rate: number;
     totalTrainings: number;
     totalMatches: number;
@@ -186,9 +185,6 @@ export class AttendanceService {
       total: attendances.length,
       present: 0,
       absent: 0,
-      late: 0,
-      sick: 0,
-      benched: 0,
       rate: 0,
       totalTrainings: 0,
       totalMatches: 0,
@@ -201,26 +197,16 @@ export class AttendanceService {
         stats.totalMatches++;
       }
 
-      switch (a.status) {
-        case AttendanceStatus.PRESENT:
-          stats.present++;
-          break;
-        case AttendanceStatus.ABSENT:
-          stats.absent++;
-          break;
-        case AttendanceStatus.LATE:
-          stats.late++;
-          break;
-        case AttendanceStatus.SICK:
-          stats.sick++;
-          break;
-        case AttendanceStatus.BENCHED:
-          stats.benched++;
-          break;
+      if (a.isPresent) {
+        stats.present++;
+      } else {
+        stats.absent++;
       }
     });
 
-    calculateAttendanceRate(stats);
+    if (stats.total > 0) {
+      stats.rate = Math.round((stats.present / stats.total) * 100);
+    }
 
     return stats;
   }
@@ -234,9 +220,6 @@ export class AttendanceService {
       total: number;
       present: number;
       absent: number;
-      late: number;
-      sick: number;
-      benched: number;
       rate: number;
       totalTrainings: number;
       totalMatches: number;
@@ -248,9 +231,6 @@ export class AttendanceService {
       total: number;
       present: number;
       absent: number;
-      late: number;
-      sick: number;
-      benched: number;
       rate: number;
       totalTrainings: number;
       totalMatches: number;
@@ -268,9 +248,6 @@ export class AttendanceService {
         total: attendances.length,
         present: 0,
         absent: 0,
-        late: 0,
-        sick: 0,
-        benched: 0,
         rate: 0,
         totalTrainings: 0,
         totalMatches: 0,
@@ -283,26 +260,16 @@ export class AttendanceService {
           stats.totalMatches++;
         }
 
-        switch (a.status) {
-          case AttendanceStatus.PRESENT:
-            stats.present++;
-            break;
-          case AttendanceStatus.ABSENT:
-            stats.absent++;
-            break;
-          case AttendanceStatus.LATE:
-            stats.late++;
-            break;
-          case AttendanceStatus.SICK:
-            stats.sick++;
-            break;
-          case AttendanceStatus.BENCHED:
-            stats.benched++;
-            break;
+        if (a.isPresent) {
+          stats.present++;
+        } else {
+          stats.absent++;
         }
       });
 
-      calculateAttendanceRate(stats);
+      if (stats.total > 0) {
+        stats.rate = Math.round((stats.present / stats.total) * 100);
+      }
 
       result.push(stats);
     }
