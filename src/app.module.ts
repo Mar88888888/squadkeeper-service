@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { SquadsModule } from './squads/squads.module';
+import { DatabaseModule } from './database/database.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { SquadsModule } from './squads/squads.module';
     AttendanceModule,
     ContactsModule,
     SquadsModule,
+    DatabaseModule,
   ],
   controllers: [AppController],
   providers: [AppService],
