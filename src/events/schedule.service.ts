@@ -1,13 +1,10 @@
-import {
-  Injectable,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource, Between } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { TrainingSchedule } from './entities/training-schedule.entity';
 import { Training } from './entities/training.entity';
 import { Group } from '../groups/entities/group.entity';
+import { GroupsService } from '../groups/groups.service';
 import { ApplyScheduleDto } from './dto/schedule.dto';
 
 const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
@@ -19,8 +16,7 @@ export class ScheduleService {
     private scheduleRepository: Repository<TrainingSchedule>,
     @InjectRepository(Training)
     private trainingRepository: Repository<Training>,
-    @InjectRepository(Group)
-    private groupRepository: Repository<Group>,
+    private groupsService: GroupsService,
     private dataSource: DataSource,
   ) {}
 
@@ -161,12 +157,6 @@ export class ScheduleService {
   }
 
   private async validateGroup(groupId: string): Promise<Group> {
-    const group = await this.groupRepository.findOne({
-      where: { id: groupId },
-    });
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${groupId} not found`);
-    }
-    return group;
+    return this.groupsService.findOne(groupId);
   }
 }

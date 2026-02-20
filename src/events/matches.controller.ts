@@ -10,9 +10,9 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
 } from '@nestjs/common';
 import { MatchesService } from './matches.service';
+import { GoalsService } from './goals.service';
 import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto } from './dto/filter-matches.dto';
@@ -27,7 +27,10 @@ import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 @Controller('matches')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class MatchesController {
-  constructor(private readonly matchesService: MatchesService) {}
+  constructor(
+    private readonly matchesService: MatchesService,
+    private readonly goalsService: GoalsService,
+  ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -48,7 +51,7 @@ export class MatchesController {
     @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterMatchesDto,
   ) {
-    return this.matchesService.findMyMatches(user.id, user.role, filters);
+    return this.matchesService.findMyMatches(user.groupIds, user.role, filters);
   }
 
   @Get(':id')
@@ -73,29 +76,23 @@ export class MatchesController {
     return this.matchesService.remove(id);
   }
 
-  @Get('group/:groupId')
-  @Roles(UserRole.COACH, UserRole.ADMIN, UserRole.PARENT)
-  findByGroup(@Param('groupId') groupId: string) {
-    return this.matchesService.findByGroup(groupId);
-  }
-
   @Get(':id/goals')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   getGoals(@Param('id') matchId: string) {
-    return this.matchesService.getGoals(matchId);
+    return this.goalsService.getGoals(matchId);
   }
 
   @Post(':id/goals')
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   addGoal(@Param('id') matchId: string, @Body() addGoalDto: AddGoalDto) {
-    return this.matchesService.addGoal(matchId, addGoalDto);
+    return this.goalsService.addGoal(matchId, addGoalDto);
   }
 
   @Delete(':id/goals/:goalId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   removeGoal(@Param('id') matchId: string, @Param('goalId') goalId: string) {
-    return this.matchesService.removeGoal(matchId, goalId);
+    return this.goalsService.removeGoal(matchId, goalId);
   }
 }

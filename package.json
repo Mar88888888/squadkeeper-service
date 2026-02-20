@@ -18,10 +18,12 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "migrate:player-enums": "ts-node src/database/migrations/migrate-player-enums.ts",
-    "migrate:training-duration": "ts-node src/database/migrations/migrate-training-duration.ts",
-    "migrate:attendance-boolean": "ts-node src/database/migrations/migrate-attendance-boolean.ts",
-    "migrate:schedule-duration": "ts-node src/database/migrations/migrate-schedule-duration.ts"
+    "typeorm": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js -d src/data-source.ts",
+    "migration:generate": "npm run typeorm -- migration:generate src/database/migrations/$npm_config_name",
+    "migration:create": "npm run typeorm -- migration:create src/database/migrations/$npm_config_name",
+    "migration:run": "npm run typeorm -- migration:run",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:show": "npm run typeorm -- migration:show"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.1",

@@ -1,12 +1,8 @@
-import {
-  Injectable,
-  NotFoundException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Training } from './entities/training.entity';
-import { Group } from '../groups/entities/group.entity';
+import { GroupsService } from '../groups/groups.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
@@ -20,20 +16,11 @@ export class TrainingsService {
   constructor(
     @InjectRepository(Training)
     private trainingsRepository: Repository<Training>,
-    @InjectRepository(Group)
-    private groupsRepository: Repository<Group>,
+    private groupsService: GroupsService,
   ) {}
 
   async create(createTrainingDto: CreateTrainingDto): Promise<Training> {
-    const group = await this.groupsRepository.findOne({
-      where: { id: createTrainingDto.groupId },
-    });
-
-    if (!group) {
-      throw new NotFoundException(
-        `Group with id ${createTrainingDto.groupId} not found`,
-      );
-    }
+    const group = await this.groupsService.findOne(createTrainingDto.groupId);
 
     const training = this.trainingsRepository.create({
       ...createTrainingDto,
@@ -58,22 +45,13 @@ export class TrainingsService {
   }
 
   async findByGroup(groupId: string): Promise<Training[]> {
-    const trainings = await this.trainingsRepository.find({
+    await this.groupsService.findOne(groupId);
+
+    return this.trainingsRepository.find({
       where: { group: { id: groupId } },
       relations: ['group'],
       order: { startTime: 'ASC' },
     });
-
-    if (trainings.length === 0) {
-      const groupExists = await this.groupsRepository.exists({
-        where: { id: groupId },
-      });
-      if (!groupExists) {
-        throw new NotFoundException(`Group with id ${groupId} not found`);
-      }
-    }
-
-    return trainings;
   }
 
   async findOne(id: string): Promise<Training> {
@@ -117,15 +95,7 @@ export class TrainingsService {
     const training = await this.findOne(id);
 
     if (updateTrainingDto.groupId && updateTrainingDto.groupId !== training.group.id) {
-      const group = await this.groupsRepository.findOne({
-        where: { id: updateTrainingDto.groupId },
-      });
-      if (!group) {
-        throw new NotFoundException(
-          `Group with id ${updateTrainingDto.groupId} not found`,
-        );
-      }
-      training.group = group;
+      training.group = await this.groupsService.findOne(updateTrainingDto.groupId);
     }
 
     Object.assign(training, {

@@ -276,4 +276,15 @@ export class AttendanceService {
 
     return result;
   }
+
+  async wasPlayerPresent(matchId: string, playerId: string): Promise<boolean> {
+    const attendance = await this.attendanceRepository.findOne({
+      where: {
+        player: { id: playerId },
+        match: { id: matchId },
+      },
+    });
+
+    return attendance?.isPresent ?? false;
+  }
 }

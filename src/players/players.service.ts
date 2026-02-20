@@ -61,7 +61,7 @@ export class PlayersService {
     private dataSource: DataSource,
   ) {}
 
-  private async findPlayerById(playerId: string): Promise<Player> {
+  async findOne(playerId: string): Promise<Player> {
     const player = await this.playersRepository.findOne({
       where: { id: playerId },
     });
@@ -226,7 +226,7 @@ export class PlayersService {
     playerId: string,
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<PlayerStatsResponse> {
-    const player = await this.findPlayerById(playerId);
+    const player = await this.findOne(playerId);
     const dateRange = getDateRangeForPeriod(period);
 
     const [matchesPlayed, goals, assists, cleanSheets, attendance] =

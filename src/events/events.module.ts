@@ -6,34 +6,26 @@ import { Goal } from './entities/goal.entity';
 import { TrainingSchedule } from './entities/training-schedule.entity';
 import { TrainingsService } from './trainings.service';
 import { MatchesService } from './matches.service';
+import { GoalsService } from './goals.service';
 import { ScheduleService } from './schedule.service';
 import { TrainingsController } from './trainings.controller';
 import { MatchesController } from './matches.controller';
 import { ScheduleController } from './schedule.controller';
-import { Group } from '../groups/entities/group.entity';
-import { Coach } from '../coaches/entities/coach.entity';
-import { Player } from '../players/entities/player.entity';
-import { Parent } from '../parents/entities/parent.entity';
-import { Attendance } from '../attendance/entities/attendance.entity';
 import { AuthModule } from '../auth/auth.module';
+import { GroupsModule } from '../groups/groups.module';
+import { PlayersModule } from '../players/players.module';
+import { AttendanceModule } from '../attendance/attendance.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([
-      Match,
-      Training,
-      Goal,
-      TrainingSchedule,
-      Group,
-      Coach,
-      Player,
-      Parent,
-      Attendance,
-    ]),
+    TypeOrmModule.forFeature([Match, Training, Goal, TrainingSchedule]),
     AuthModule,
+    GroupsModule,
+    PlayersModule,
+    AttendanceModule,
   ],
   controllers: [TrainingsController, MatchesController, ScheduleController],
-  providers: [TrainingsService, MatchesService, ScheduleService],
+  providers: [TrainingsService, MatchesService, GoalsService, ScheduleService],
   exports: [TypeOrmModule, ScheduleService],
 })
 export class EventsModule {}

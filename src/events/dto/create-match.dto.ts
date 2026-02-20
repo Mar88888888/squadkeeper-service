@@ -4,6 +4,9 @@ import {
   IsBoolean,
   IsEnum,
   IsOptional,
+  IsInt,
+  Min,
+  Max,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MatchType } from '../enums/match-type.enum';
@@ -16,9 +19,11 @@ export class CreateMatchDto {
   @Type(() => Date)
   startTime: Date;
 
-  @IsDate()
-  @Type(() => Date)
-  endTime: Date;
+  @Type(() => Number)
+  @IsInt()
+  @Min(45, { message: 'Duration must be at least 45 minutes' })
+  @Max(150, { message: 'Duration cannot exceed 150 minutes' })
+  durationMinutes: number;
 
   @IsString()
   location: string;
