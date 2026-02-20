@@ -2,6 +2,7 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, FindOptionsWhere } from 'typeorm';
@@ -16,6 +17,8 @@ import { buildDateFilter } from '../common/utils/date-filter.util';
 
 @Injectable()
 export class MatchesService {
+  private readonly logger = new Logger(MatchesService.name);
+
   constructor(
     @InjectRepository(Match)
     private matchesRepository: Repository<Match>,
@@ -33,7 +36,9 @@ export class MatchesService {
       awayGoals: null,
     });
 
-    return await this.matchesRepository.save(match);
+    const saved = await this.matchesRepository.save(match);
+    this.logger.log(`Match created: ${saved.id} for group ${group.id}`);
+    return saved;
   }
 
   async updateResult(
@@ -49,36 +54,36 @@ export class MatchesService {
       throw new NotFoundException(`Match with id ${id} not found`);
     }
 
-    if (match.goals && match.goals.length > 0) {
-      const existingRegularGoals = match.goals.filter(
-        (g) => !g.isOwnGoal,
-      ).length;
-      const existingOwnGoals = match.goals.filter((g) => g.isOwnGoal).length;
-
-      const newOurGoals = match.isHome
-        ? updateMatchResultDto.homeGoals
-        : updateMatchResultDto.awayGoals;
-      const newConcededGoals = match.isHome
-        ? updateMatchResultDto.awayGoals
-        : updateMatchResultDto.homeGoals;
-
-      if (newOurGoals < existingRegularGoals) {
-        throw new BadRequestException(
-          `Cannot set team score to ${newOurGoals}. There are ${existingRegularGoals} goals already recorded`,
-        );
-      }
-
-      if (newConcededGoals < existingOwnGoals) {
-        throw new BadRequestException(
-          `Cannot set conceded goals to ${newConcededGoals}. There are ${existingOwnGoals} own goals already recorded`,
-        );
-      }
-    }
+    this.validateScore(match, updateMatchResultDto);
 
     match.homeGoals = updateMatchResultDto.homeGoals;
     match.awayGoals = updateMatchResultDto.awayGoals;
 
-    return await this.matchesRepository.save(match);
+    const saved = await this.matchesRepository.save(match);
+    this.logger.log(`Match result updated: ${id} (${saved.homeGoals}-${saved.awayGoals})`);
+    return saved;
+  }
+
+  private validateScore(match: Match, dto: UpdateMatchResultDto): void {
+    if (!match.goals || match.goals.length === 0) return;
+
+    const regularGoals = match.goals.filter((g) => !g.isOwnGoal).length;
+    const ownGoals = match.goals.filter((g) => g.isOwnGoal).length;
+
+    const ourScore = match.isHome ? dto.homeGoals : dto.awayGoals;
+    const theirScore = match.isHome ? dto.awayGoals : dto.homeGoals;
+
+    if (ourScore < regularGoals) {
+      throw new BadRequestException(
+        `Cannot set team score to ${ourScore}. There are ${regularGoals} goals already recorded`,
+      );
+    }
+
+    if (theirScore < ownGoals) {
+      throw new BadRequestException(
+        `Cannot set conceded goals to ${theirScore}. There are ${ownGoals} own goals already recorded`,
+      );
+    }
   }
 
   async findAll(filters: FilterMatchesDto = {}): Promise<Match[]> {
@@ -143,6 +148,7 @@ export class MatchesService {
 
     if (match) {
       await this.matchesRepository.remove(match);
+      this.logger.log(`Match deleted: ${id}`);
     }
   }
 }

@@ -116,7 +116,6 @@ export class ScheduleService {
         scheduleMap.set(item.dayOfWeek, item);
       }
 
-      // Generate trainings for the date range
       const trainingsToCreate: Partial<Training>[] = [];
       const currentDate = new Date(fromDate);
 

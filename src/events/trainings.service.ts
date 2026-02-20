@@ -111,8 +111,13 @@ export class TrainingsService {
   }
 
   async remove(id: string): Promise<void> {
-    const training = await this.findOne(id);
-    await this.trainingsRepository.remove(training);
-    this.logger.log(`Training deleted: ${id}`);
+    const training = await this.trainingsRepository.findOne({
+      where: { id },
+    });
+
+    if (training) {
+      await this.trainingsRepository.remove(training);
+      this.logger.log(`Training deleted: ${id}`);
+    }
   }
 }

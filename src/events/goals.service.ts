@@ -86,7 +86,7 @@ export class GoalsService {
     const isOwnGoal = addGoalDto.isOwnGoal || false;
 
     this.validateGoalWithinScore(
-      this.countGoals(match.goals || []),
+      this.countGoals(match.goals),
       this.getTeamGoals(match, match.homeGoals, match.awayGoals),
       isOwnGoal,
     );
