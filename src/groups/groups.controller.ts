@@ -10,7 +10,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
 } from '@nestjs/common';
 import { GroupsService } from './groups.service';
 import { CreateGroupDto } from './dto/create-group.dto';
@@ -44,7 +43,7 @@ export class GroupsController {
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   findMyGroups(@CurrentUser() user: AuthenticatedUser) {
-    return this.groupsService.findMyGroups(user.id, user.role);
+    return this.groupsService.findMyGroups(user.groupIds);
   }
 
   @Get(':id')

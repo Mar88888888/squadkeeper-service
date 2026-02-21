@@ -12,9 +12,7 @@ import { Player } from './entities/player.entity';
 import { User } from '../users/entities/user.entity';
 import { Goal } from '../events/entities/goal.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
-import { Coach } from '../coaches/entities/coach.entity';
 import { Group } from '../groups/entities/group.entity';
-import { Parent } from '../parents/entities/parent.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
@@ -52,12 +50,8 @@ export class PlayersService {
     private goalsRepository: Repository<Goal>,
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
-    @InjectRepository(Coach)
-    private coachesRepository: Repository<Coach>,
     @InjectRepository(Group)
     private groupsRepository: Repository<Group>,
-    @InjectRepository(Parent)
-    private parentsRepository: Repository<Parent>,
     private dataSource: DataSource,
   ) {}
 
@@ -73,12 +67,11 @@ export class PlayersService {
     return player;
   }
 
-  async findPlayerByUserId(userId: string): Promise<Player> {
-    const player = await this.playersRepository
-      .createQueryBuilder('player')
-      .innerJoin('player.user', 'user')
-      .where('user.id = :userId', { userId })
-      .getOne();
+  async findByUserId(userId: string): Promise<Player> {
+    const player = await this.playersRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['group'],
+    });
 
     if (!player) {
       throw new NotFoundException('Player profile not found');
@@ -252,23 +245,9 @@ export class PlayersService {
   }
 
   async getTeamStats(
-    userId: string,
+    groupIds: string[],
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<TeamStatsResponse[]> {
-    const coach = await this.coachesRepository.findOne({
-      where: { user: { id: userId } },
-      relations: ['headGroups', 'assistantGroups'],
-    });
-
-    if (!coach) {
-      throw new NotFoundException('Coach profile not found');
-    }
-
-    const groupIds = [
-      ...coach.headGroups.map((g) => g.id),
-      ...coach.assistantGroups.map((g) => g.id),
-    ];
-
     if (groupIds.length === 0) {
       return [];
     }
@@ -306,29 +285,21 @@ export class PlayersService {
   }
 
   async getChildrenStats(
-    userId: string,
+    childrenIds: string[],
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<ChildrenStatsResponse> {
-    const parent = await this.parentsRepository.findOne({
-      relations: ['user', 'children', 'children.group'],
-      where: {
-        user: {
-          id: userId,
-        },
-      },
-      order: {
-        children: {
-          firstName: 'ASC',
-        },
-      },
-    });
-
-    if (!parent) {
-      throw new NotFoundException('Parent profile not found');
+    if (childrenIds.length === 0) {
+      return { children: [] };
     }
 
+    const players = await this.playersRepository.find({
+      where: { id: In(childrenIds) },
+      relations: ['group'],
+      order: { firstName: 'ASC' },
+    });
+
     const children: ChildInfo[] = await Promise.all(
-      parent.children.map(async (child): Promise<ChildInfo> => {
+      players.map(async (child): Promise<ChildInfo> => {
         const stats = await this.getPlayerStats(child.id, period);
         return {
           id: child.id,
@@ -339,10 +310,6 @@ export class PlayersService {
         };
       }),
     );
-
-    if (children.length === 0) {
-      return { children: [] };
-    }
 
     return { children };
   }

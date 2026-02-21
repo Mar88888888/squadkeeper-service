@@ -63,6 +63,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       firstName: user.firstName,
       lastName: user.lastName,
       groupIds,
+      playerId: user.player?.id,
+      coachId: user.coach?.id,
+      children: user.parent?.children?.map((c) => ({
+        id: c.id,
+        groupId: c.group?.id,
+      })),
     };
   }
 

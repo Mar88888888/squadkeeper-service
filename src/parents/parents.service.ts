@@ -34,6 +34,19 @@ export class ParentsService {
     });
   }
 
+  async findByUserId(userId: string): Promise<Parent> {
+    const parent = await this.parentsRepository.findOne({
+      where: { user: { id: userId } },
+      relations: ['children', 'children.group'],
+    });
+
+    if (!parent) {
+      throw new NotFoundException('Parent profile not found');
+    }
+
+    return parent;
+  }
+
   async remove(id: string): Promise<void> {
     const parent = await this.parentsRepository.findOne({
       where: { id },

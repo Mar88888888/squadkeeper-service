@@ -7,11 +7,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
-  ForbiddenException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { AttendanceService } from './attendance.service';
 import {
   MarkAttendanceBatchDto,
@@ -21,26 +17,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
-import { Player } from '../players/entities/player.entity';
-import { Parent } from '../parents/entities/parent.entity';
-import { Training } from '../events/entities/training.entity';
-import { Match } from '../events/entities/match.entity';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 @Controller('attendance')
 export class AttendanceController {
-  constructor(
-    private readonly attendanceService: AttendanceService,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
-    @InjectRepository(Parent)
-    private parentsRepository: Repository<Parent>,
-    @InjectRepository(Training)
-    private trainingsRepository: Repository<Training>,
-    @InjectRepository(Match)
-    private matchesRepository: Repository<Match>,
-  ) {}
+  constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('batch')
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -53,146 +35,45 @@ export class AttendanceController {
   @Get('training/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  async getTrainingAttendance(
+  getTrainingAttendance(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const { id: userId, role } = user;
-
-    if (role === UserRole.ADMIN || role === UserRole.COACH) {
-      return this.attendanceService.findByEvent(id, EventType.TRAINING);
-    }
-
-    const training = await this.trainingsRepository.findOne({
-      where: { id },
-      relations: ['group'],
-    });
-    if (!training) {
-      throw new ForbiddenException('Training not found');
-    }
-
-    if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['group'],
-      });
-      if (!player || player.group?.id !== training.group.id) {
-        throw new ForbiddenException('You do not have access to this training');
-      }
-      return this.attendanceService.findByEventForPlayers(
-        id,
-        EventType.TRAINING,
-        [player.id],
-      );
-    }
-
-    if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children', 'children.group'],
-      });
-      const childrenInGroup =
-        parent?.children?.filter(
-          (child) => child.group?.id === training.group.id,
-        ) || [];
-      if (childrenInGroup.length === 0) {
-        throw new ForbiddenException('You do not have access to this training');
-      }
-      const childIds = childrenInGroup.map((c) => c.id);
-      return this.attendanceService.findByEventForPlayers(
-        id,
-        EventType.TRAINING,
-        childIds,
-      );
-    }
-
-    throw new ForbiddenException('Access denied');
+    return this.attendanceService.getEventAttendanceForUser(
+      id,
+      EventType.TRAINING,
+      user.role,
+      user.groupIds,
+      user.playerId,
+      user.children,
+    );
   }
 
   @Get('match/:id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  async getMatchAttendance(
+  getMatchAttendance(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    const { id: userId, role } = user;
-
-    if (role === UserRole.ADMIN || role === UserRole.COACH) {
-      return this.attendanceService.findByEvent(id, EventType.MATCH);
-    }
-
-    const match = await this.matchesRepository.findOne({
-      where: { id },
-      relations: ['group'],
-    });
-    if (!match) {
-      throw new ForbiddenException('Match not found');
-    }
-
-    if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['group'],
-      });
-      if (!player || player.group?.id !== match.group.id) {
-        throw new ForbiddenException('You do not have access to this match');
-      }
-      return this.attendanceService.findByEventForPlayers(id, EventType.MATCH, [
-        player.id,
-      ]);
-    }
-
-    if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children', 'children.group'],
-      });
-      const childrenInGroup =
-        parent?.children?.filter(
-          (child) => child.group?.id === match.group.id,
-        ) || [];
-      if (childrenInGroup.length === 0) {
-        throw new ForbiddenException('You do not have access to this match');
-      }
-      const childIds = childrenInGroup.map((c) => c.id);
-      return this.attendanceService.findByEventForPlayers(
-        id,
-        EventType.MATCH,
-        childIds,
-      );
-    }
-
-    throw new ForbiddenException('Access denied');
+    return this.attendanceService.getEventAttendanceForUser(
+      id,
+      EventType.MATCH,
+      user.role,
+      user.groupIds,
+      user.playerId,
+      user.children,
+    );
   }
 
   @Get('my/stats')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.PLAYER, UserRole.PARENT)
-  async getMyStats(@CurrentUser() user: AuthenticatedUser) {
-    const { id: userId, role } = user;
-
-    if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-      });
-      if (!player) {
-        throw new ForbiddenException('Player profile not found');
-      }
-      return this.attendanceService.getPlayerStats([player.id]);
-    }
-
-    if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children'],
-      });
-      if (!parent || !parent.children?.length) {
-        throw new ForbiddenException('No children found');
-      }
-      return this.attendanceService.getStatsPerPlayer(parent.children);
-    }
-
-    throw new ForbiddenException('Access denied');
+  getMyStats(@CurrentUser() user: AuthenticatedUser) {
+    return this.attendanceService.getMyStatsForUser(
+      user.role,
+      user.playerId,
+      user.children,
+    );
   }
 }

@@ -5,10 +5,9 @@ import { GroupsController } from './groups.controller';
 import { Group } from './entities/group.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
-import { Parent } from '../parents/entities/parent.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Group, Coach, Player, Parent])],
+  imports: [TypeOrmModule.forFeature([Group, Coach, Player])],
   controllers: [GroupsController],
   providers: [GroupsService],
   exports: [GroupsService],

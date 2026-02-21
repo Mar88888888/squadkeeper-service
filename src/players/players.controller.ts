@@ -11,7 +11,6 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
 } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
@@ -38,13 +37,12 @@ export class PlayersController {
 
   @Get('stats/my')
   @Roles(UserRole.PLAYER)
-  async getMyStats(
+  getMyStats(
     @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ) {
-    const player = await this.playersService.findPlayerByUserId(user.id);
     return this.playersService.getPlayerStats(
-      player.id,
+      user.playerId!,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -56,7 +54,7 @@ export class PlayersController {
     @Query('period') period?: StatsPeriod,
   ) {
     return this.playersService.getTeamStats(
-      user.id,
+      user.groupIds,
       period || StatsPeriod.ALL_TIME,
     );
   }
@@ -67,8 +65,9 @@ export class PlayersController {
     @CurrentUser() user: AuthenticatedUser,
     @Query('period') period?: StatsPeriod,
   ): Promise<ChildrenStatsResponse> {
+    const childrenIds = user.children?.map((c) => c.id) || [];
     return this.playersService.getChildrenStats(
-      user.id,
+      childrenIds,
       period || StatsPeriod.ALL_TIME,
     );
   }

@@ -2,10 +2,11 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, Repository } from 'typeorm';
+import { DataSource, EntityManager, In, Repository } from 'typeorm';
 import { Attendance } from './entities/attendance.entity';
 import { Player } from '../players/entities/player.entity';
 import { Training } from '../events/entities/training.entity';
@@ -16,6 +17,24 @@ import {
   EventType,
 } from './dto/mark-attendance-batch.dto';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
+import { TrainingsService } from '../events/trainings.service';
+import { MatchesService } from '../events/matches.service';
+import { UserRole } from '../users/enums/user-role.enum';
+import { ChildInfo } from '../auth/dto/authenticated-user.dto';
+
+export interface AttendanceStats {
+  total: number;
+  present: number;
+  absent: number;
+  rate: number;
+  totalTrainings: number;
+  totalMatches: number;
+}
+
+export interface PlayerAttendanceStats extends AttendanceStats {
+  playerId: string;
+  playerName: string;
+}
 
 @Injectable()
 export class AttendanceService {
@@ -25,29 +44,22 @@ export class AttendanceService {
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
     private dataSource: DataSource,
+    private readonly trainingsService: TrainingsService,
+    private readonly matchesService: MatchesService,
   ) {}
 
   async markBatch(dto: MarkAttendanceBatchDto): Promise<Attendance[]> {
     try {
       return await this.dataSource.transaction(async (manager) => {
-        if (dto.eventType === EventType.TRAINING) {
-          const training = await manager.findOne(Training, {
-            where: { id: dto.eventId },
-          });
-          if (!training) {
-            throw new NotFoundException(
-              `Training with ID ${dto.eventId} not found`,
-            );
-          }
-        } else {
-          const match = await manager.findOne(Match, {
-            where: { id: dto.eventId },
-          });
-          if (!match) {
-            throw new NotFoundException(
-              `Match with ID ${dto.eventId} not found`,
-            );
-          }
+        const event =
+          dto.eventType === EventType.TRAINING
+            ? await manager.findOne(Training, { where: { id: dto.eventId } })
+            : await manager.findOne(Match, { where: { id: dto.eventId } });
+
+        if (!event) {
+          throw new NotFoundException(
+            `${dto.eventType === EventType.TRAINING ? 'Training' : 'Match'} with ID ${dto.eventId} not found`,
+          );
         }
 
         const results: Attendance[] = [];
@@ -57,7 +69,7 @@ export class AttendanceService {
             manager,
             record,
             dto.eventType,
-            dto.eventId,
+            event,
           );
           results.push(attendance);
         }
@@ -77,7 +89,7 @@ export class AttendanceService {
     manager: EntityManager,
     record: AttendanceRecordDto,
     eventType: EventType,
-    eventId: string,
+    event: Training | Match,
   ): Promise<Attendance> {
     const player = await manager.findOne(Player, {
       where: { id: record.playerId },
@@ -92,8 +104,8 @@ export class AttendanceService {
       where: {
         player: { id: record.playerId },
         ...(eventType === EventType.TRAINING
-          ? { training: { id: eventId } }
-          : { match: { id: eventId } }),
+          ? { training: { id: event.id } }
+          : { match: { id: event.id } }),
       },
       relations: ['player', 'training', 'match'],
     });
@@ -105,16 +117,21 @@ export class AttendanceService {
 
       // Delete evaluation if player is marked absent
       if (!record.isPresent) {
-        if (eventType === EventType.TRAINING) {
-          await manager.delete(Evaluation, {
-            player: { id: record.playerId },
-            training: { id: eventId },
-          });
-        } else {
-          await manager.delete(Evaluation, {
-            player: { id: record.playerId },
-            match: { id: eventId },
-          });
+        const deleteResult =
+          eventType === EventType.TRAINING
+            ? await manager.delete(Evaluation, {
+                player: { id: record.playerId },
+                training: { id: event.id },
+              })
+            : await manager.delete(Evaluation, {
+                player: { id: record.playerId },
+                match: { id: event.id },
+              });
+
+        if (deleteResult.affected) {
+          this.logger.log(
+            `Deleted evaluation for absent player ${record.playerId} on ${eventType} ${event.id}`,
+          );
         }
       }
 
@@ -124,19 +141,9 @@ export class AttendanceService {
         player,
         isPresent: record.isPresent,
         notes: record.notes || null,
+        training: eventType === EventType.TRAINING ? (event as Training) : null,
+        match: eventType === EventType.MATCH ? (event as Match) : null,
       };
-
-      if (eventType === EventType.TRAINING) {
-        attendanceData.training = await manager.findOne(Training, {
-          where: { id: eventId },
-        });
-        attendanceData.match = null;
-      } else {
-        attendanceData.match = await manager.findOne(Match, {
-          where: { id: eventId },
-        });
-        attendanceData.training = null;
-      }
 
       const attendance = manager.create(Attendance, attendanceData);
       return await manager.save(attendance);
@@ -168,113 +175,45 @@ export class AttendanceService {
     return allAttendance.filter((a) => playerIds.includes(a.player.id));
   }
 
-  async getPlayerStats(playerIds: string[]): Promise<{
-    total: number;
-    present: number;
-    absent: number;
-    rate: number;
-    totalTrainings: number;
-    totalMatches: number;
-  }> {
+  async getPlayerStats(playerIds: string[]): Promise<AttendanceStats> {
     const attendances = await this.attendanceRepository.find({
       where: playerIds.map((id) => ({ player: { id } })),
       relations: ['training', 'match'],
     });
 
-    const stats = {
-      total: attendances.length,
-      present: 0,
-      absent: 0,
-      rate: 0,
-      totalTrainings: 0,
-      totalMatches: 0,
-    };
-
-    attendances.forEach((a) => {
-      if (a.training) {
-        stats.totalTrainings++;
-      } else if (a.match) {
-        stats.totalMatches++;
-      }
-
-      if (a.isPresent) {
-        stats.present++;
-      } else {
-        stats.absent++;
-      }
-    });
-
-    if (stats.total > 0) {
-      stats.rate = Math.round((stats.present / stats.total) * 100);
-    }
-
-    return stats;
+    return this.calculateStats(attendances);
   }
 
   async getStatsPerPlayer(
-    players: { id: string; firstName: string; lastName: string }[],
-  ): Promise<
-    Array<{
-      playerId: string;
-      playerName: string;
-      total: number;
-      present: number;
-      absent: number;
-      rate: number;
-      totalTrainings: number;
-      totalMatches: number;
-    }>
-  > {
-    const result: Array<{
-      playerId: string;
-      playerName: string;
-      total: number;
-      present: number;
-      absent: number;
-      rate: number;
-      totalTrainings: number;
-      totalMatches: number;
-    }> = [];
+    playerIds: string[],
+  ): Promise<Array<PlayerAttendanceStats>> {
+    const allAttendances = await this.attendanceRepository.find({
+      where: { player: { id: In(playerIds) } },
+      relations: ['player', 'training', 'match'],
+    });
 
-    for (const player of players) {
-      const attendances = await this.attendanceRepository.find({
-        where: { player: { id: player.id } },
-        relations: ['training', 'match'],
-      });
-
-      const stats = {
-        playerId: player.id,
-        playerName: `${player.firstName} ${player.lastName}`,
-        total: attendances.length,
-        present: 0,
-        absent: 0,
-        rate: 0,
-        totalTrainings: 0,
-        totalMatches: 0,
-      };
-
-      attendances.forEach((a) => {
-        if (a.training) {
-          stats.totalTrainings++;
-        } else if (a.match) {
-          stats.totalMatches++;
-        }
-
-        if (a.isPresent) {
-          stats.present++;
-        } else {
-          stats.absent++;
-        }
-      });
-
-      if (stats.total > 0) {
-        stats.rate = Math.round((stats.present / stats.total) * 100);
+    const attendancesByPlayer = new Map<
+      string,
+      { player: Player; attendances: Attendance[] }
+    >();
+    for (const attendance of allAttendances) {
+      const playerId = attendance.player.id;
+      if (!attendancesByPlayer.has(playerId)) {
+        attendancesByPlayer.set(playerId, {
+          player: attendance.player,
+          attendances: [],
+        });
       }
-
-      result.push(stats);
+      attendancesByPlayer.get(playerId)!.attendances.push(attendance);
     }
 
-    return result;
+    return Array.from(attendancesByPlayer.values()).map(
+      ({ player, attendances }) => ({
+        playerId: player.id,
+        playerName: `${player.firstName} ${player.lastName}`,
+        ...this.calculateStats(attendances),
+      }),
+    );
   }
 
   async wasPlayerPresent(matchId: string, playerId: string): Promise<boolean> {
@@ -286,5 +225,109 @@ export class AttendanceService {
     });
 
     return attendance?.isPresent ?? false;
+  }
+
+  async getEventAttendanceForUser(
+    eventId: string,
+    eventType: EventType,
+    role: UserRole,
+    groupIds: string[],
+    playerId?: string,
+    children?: ChildInfo[],
+  ): Promise<Attendance[]> {
+    if (role === UserRole.ADMIN || role === UserRole.COACH) {
+      return this.findByEvent(eventId, eventType);
+    }
+
+    const event = await this.findEvent(eventId, eventType);
+    const eventGroupId = event.group.id;
+
+    if (!groupIds.includes(eventGroupId)) {
+      throw new ForbiddenException(
+        `You do not have access to this ${eventType.toLowerCase()}`,
+      );
+    }
+
+    if (role === UserRole.PLAYER && playerId) {
+      return this.findByEventForPlayers(eventId, eventType, [playerId]);
+    }
+
+    if (role === UserRole.PARENT && children) {
+      const childrenInGroup = children.filter(
+        (child) => child.groupId === eventGroupId,
+      );
+      const childIds = childrenInGroup.map((c) => c.id);
+      return this.findByEventForPlayers(eventId, eventType, childIds);
+    }
+
+    throw new ForbiddenException('Access denied');
+  }
+
+  private calculateStats(attendances: Attendance[]): AttendanceStats {
+    const stats: AttendanceStats = {
+      total: attendances.length,
+      present: 0,
+      absent: 0,
+      rate: 0,
+      totalTrainings: 0,
+      totalMatches: 0,
+    };
+
+    for (const a of attendances) {
+      if (a.training) {
+        stats.totalTrainings++;
+      } else if (a.match) {
+        stats.totalMatches++;
+      }
+
+      if (a.isPresent) {
+        stats.present++;
+      } else {
+        stats.absent++;
+      }
+    }
+
+    if (stats.total > 0) {
+      stats.rate = Math.round((stats.present / stats.total) * 100);
+    }
+
+    return stats;
+  }
+
+  private async findEvent(
+    eventId: string,
+    eventType: EventType,
+  ): Promise<Training | Match> {
+    try {
+      if (eventType === EventType.TRAINING) {
+        return await this.trainingsService.findOne(eventId);
+      } else {
+        return await this.matchesService.findOne(eventId);
+      }
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw new NotFoundException(
+          `${eventType === EventType.TRAINING ? 'Training' : 'Match'} not found`,
+        );
+      }
+      throw error;
+    }
+  }
+
+  async getMyStatsForUser(
+    role: UserRole,
+    playerId?: string,
+    children?: ChildInfo[],
+  ): Promise<AttendanceStats | PlayerAttendanceStats[]> {
+    if (role === UserRole.PLAYER && playerId) {
+      return this.getPlayerStats([playerId]);
+    }
+
+    if (role === UserRole.PARENT && children?.length) {
+      const childIds = children.map((c) => c.id);
+      return this.getStatsPerPlayer(childIds);
+    }
+
+    throw new ForbiddenException('Access denied');
   }
 }

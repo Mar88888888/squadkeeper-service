@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Match } from './entities/match.entity';
 import { Training } from './entities/training.entity';
@@ -22,10 +22,10 @@ import { AttendanceModule } from '../attendance/attendance.module';
     AuthModule,
     GroupsModule,
     PlayersModule,
-    AttendanceModule,
+    forwardRef(() => AttendanceModule),
   ],
   controllers: [TrainingsController, MatchesController, ScheduleController],
   providers: [TrainingsService, MatchesService, GoalsService, ScheduleService],
-  exports: [TypeOrmModule, ScheduleService],
+  exports: [TypeOrmModule, ScheduleService, TrainingsService, MatchesService],
 })
 export class EventsModule {}
