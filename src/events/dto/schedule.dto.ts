@@ -26,8 +26,8 @@ export class ScheduleItemDto {
   startTime: string;
 
   @IsInt()
-  @Min(15)
-  @Max(300)
+  @Min(15, { message: 'Duration must be at least 15 minutes' })
+  @Max(180, { message: 'Duration cannot exceed 180 minutes (3 hours)' })
   durationMinutes: number;
 
   @IsString()

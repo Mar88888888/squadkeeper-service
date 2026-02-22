@@ -7,11 +7,7 @@ import {
   ArrayMinSize,
 } from 'class-validator';
 import { AttendanceRecordDto } from './attendance-record.dto';
-
-export enum EventType {
-  TRAINING = 'TRAINING',
-  MATCH = 'MATCH',
-}
+import { EventType } from '../../events/enums/event-type.enum';
 
 export class MarkAttendanceBatchDto {
   @IsUUID()

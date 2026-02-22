@@ -9,10 +9,8 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { AttendanceService } from './attendance.service';
-import {
-  MarkAttendanceBatchDto,
-  EventType,
-} from './dto/mark-attendance-batch.dto';
+import { MarkAttendanceBatchDto } from './dto/mark-attendance-batch.dto';
+import { EventType } from '../events/enums/event-type.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';

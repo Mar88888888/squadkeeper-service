@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { TrainingSchedule } from './entities/training-schedule.entity';
@@ -11,6 +11,8 @@ const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class ScheduleService {
+  private readonly logger = new Logger(ScheduleService.name);
+
   constructor(
     @InjectRepository(TrainingSchedule)
     private scheduleRepository: Repository<TrainingSchedule>,
@@ -147,6 +149,10 @@ export class ScheduleService {
       if (trainingsToCreate.length > 0) {
         await manager.save(Training, trainingsToCreate);
       }
+
+      this.logger.log(
+        `Schedule applied for group ${groupId}: ${deletedCount} deleted, ${trainingsToCreate.length} created (${dto.fromDate} to ${dto.toDate})`,
+      );
 
       return {
         deleted: deletedCount,

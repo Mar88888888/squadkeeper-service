@@ -92,7 +92,7 @@ export class TrainingsController {
   ) {
     const training = await this.trainingsService.findOne(id);
 
-    if (!this.permissionsService.checkTrainingAccess(user, training)) {
+    if (!this.permissionsService.checkEventAccess(user, training)) {
       throw new ForbiddenException('You do not belong to this group');
     }
 
@@ -108,7 +108,7 @@ export class TrainingsController {
   ) {
     const training = await this.trainingsService.findOne(id);
 
-    if (!this.permissionsService.checkTrainingAccess(user, training)) {
+    if (!this.permissionsService.checkEventAccess(user, training)) {
       throw new ForbiddenException(
         'You can only update trainings for your own groups',
       );
@@ -137,7 +137,7 @@ export class TrainingsController {
   ) {
     const training = await this.trainingsService.findOne(id);
 
-    if (!this.permissionsService.checkTrainingAccess(user, training)) {
+    if (!this.permissionsService.checkEventAccess(user, training)) {
       throw new ForbiddenException(
         'You can only delete trainings for your own groups',
       );

@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  ForbiddenException,
 } from '@nestjs/common';
 import { MatchesService } from './matches.service';
 import { GoalsService } from './goals.service';
@@ -23,6 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
+import { PermissionsService } from '../auth/permissions.service';
 
 @Controller('matches')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,12 +32,24 @@ export class MatchesController {
   constructor(
     private readonly matchesService: MatchesService,
     private readonly goalsService: GoalsService,
+    private readonly permissionsService: PermissionsService,
   ) {}
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  create(@Body() createMatchDto: CreateMatchDto) {
+  create(
+    @Body() createMatchDto: CreateMatchDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    if (
+      user.role !== UserRole.ADMIN &&
+      !user.groupIds?.includes(createMatchDto.groupId)
+    ) {
+      throw new ForbiddenException(
+        'You can only create matches for your own groups',
+      );
+    }
     return this.matchesService.create(createMatchDto);
   }
 
@@ -62,17 +76,37 @@ export class MatchesController {
 
   @Patch(':id/score')
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  updateResult(
+  async updateResult(
     @Param('id') id: string,
     @Body() updateMatchResultDto: UpdateMatchResultDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
+    const match = await this.matchesService.findOne(id);
+
+    if (!this.permissionsService.checkEventAccess(user, match)) {
+      throw new ForbiddenException(
+        'You can only update scores for your own groups',
+      );
+    }
+
     return this.matchesService.updateResult(id, updateMatchResultDto);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  remove(@Param('id') id: string) {
+  async remove(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const match = await this.matchesService.findOne(id);
+
+    if (!this.permissionsService.checkEventAccess(user, match)) {
+      throw new ForbiddenException(
+        'You can only delete matches for your own groups',
+      );
+    }
+
     return this.matchesService.remove(id);
   }
 
@@ -85,14 +119,38 @@ export class MatchesController {
   @Post(':id/goals')
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  addGoal(@Param('id') matchId: string, @Body() addGoalDto: AddGoalDto) {
+  async addGoal(
+    @Param('id') matchId: string,
+    @Body() addGoalDto: AddGoalDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const match = await this.matchesService.findOne(matchId);
+
+    if (!this.permissionsService.checkEventAccess(user, match)) {
+      throw new ForbiddenException(
+        'You can only add goals to matches for your own groups',
+      );
+    }
+
     return this.goalsService.addGoal(matchId, addGoalDto);
   }
 
   @Delete(':id/goals/:goalId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.COACH, UserRole.ADMIN)
-  removeGoal(@Param('id') matchId: string, @Param('goalId') goalId: string) {
+  async removeGoal(
+    @Param('id') matchId: string,
+    @Param('goalId') goalId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    const match = await this.matchesService.findOne(matchId);
+
+    if (!this.permissionsService.checkEventAccess(user, match)) {
+      throw new ForbiddenException(
+        'You can only remove goals from matches for your own groups',
+      );
+    }
+
     return this.goalsService.removeGoal(matchId, goalId);
   }
 }

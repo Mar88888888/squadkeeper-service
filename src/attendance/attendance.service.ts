@@ -12,10 +12,8 @@ import { Player } from '../players/entities/player.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
 import { Evaluation } from '../evaluations/entities/evaluation.entity';
-import {
-  MarkAttendanceBatchDto,
-  EventType,
-} from './dto/mark-attendance-batch.dto';
+import { MarkAttendanceBatchDto } from './dto/mark-attendance-batch.dto';
+import { EventType } from '../events/enums/event-type.enum';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
 import { TrainingsService } from '../events/trainings.service';
 import { MatchesService } from '../events/matches.service';

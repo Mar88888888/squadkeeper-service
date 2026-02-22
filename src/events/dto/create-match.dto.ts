@@ -5,6 +5,7 @@ import {
   IsEnum,
   IsOptional,
   IsInt,
+  IsUUID,
   Min,
   Max,
 } from 'class-validator';
@@ -12,7 +13,7 @@ import { Type } from 'class-transformer';
 import { MatchType } from '../enums/match-type.enum';
 
 export class CreateMatchDto {
-  @IsString()
+  @IsUUID()
   groupId: string;
 
   @IsDate()

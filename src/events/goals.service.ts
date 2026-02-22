@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Goal } from './entities/goal.entity';
@@ -11,6 +11,8 @@ import { AddGoalDto } from './dto/add-goal.dto';
 
 @Injectable()
 export class GoalsService {
+  private readonly logger = new Logger(GoalsService.name);
+
   constructor(
     @InjectRepository(Goal)
     private goalsRepository: Repository<Goal>,
@@ -101,6 +103,9 @@ export class GoalsService {
 
     let assist: Player | null = null;
     if (addGoalDto.assistId) {
+      if (addGoalDto.assistId === addGoalDto.scorerId) {
+        throw new BadRequestException('A player cannot assist their own goal');
+      }
       assist = await this.playersService.findOne(addGoalDto.assistId);
       await this.validatePlayerPlayed(
         assist.id,
@@ -118,7 +123,11 @@ export class GoalsService {
       isOwnGoal,
     });
 
-    return await this.goalsRepository.save(goal);
+    const savedGoal = await this.goalsRepository.save(goal);
+    this.logger.log(
+      `Goal added to match ${matchId}: scorer=${scorer.id}${assist ? `, assist=${assist.id}` : ''}${isOwnGoal ? ' (own goal)' : ''}`,
+    );
+    return savedGoal;
   }
 
   async removeGoal(matchId: string, goalId: string): Promise<void> {
@@ -128,6 +137,7 @@ export class GoalsService {
 
     if (goal) {
       await this.goalsRepository.remove(goal);
+      this.logger.log(`Goal ${goalId} removed from match ${matchId}`);
     }
   }
 

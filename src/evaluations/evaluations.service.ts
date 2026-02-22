@@ -16,12 +16,13 @@ import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
+import { EventType } from '../events/enums/event-type.enum';
 
 const DEFAULT_RATING = 5;
 
 export interface RatingHistoryPoint {
   date: string;
-  eventType: 'training' | 'match';
+  eventType: EventType;
   eventId: string;
   averageRating: number;
   ratings: {
@@ -273,16 +274,16 @@ export class EvaluationsService {
 
     for (const evaluation of evaluations) {
       let eventDate: Date;
-      let eventType: 'training' | 'match';
+      let eventType: EventType;
       let eventId: string;
 
       if (evaluation.training) {
         eventDate = new Date(evaluation.training.startTime);
-        eventType = 'training';
+        eventType = EventType.TRAINING;
         eventId = evaluation.training.id;
       } else if (evaluation.match) {
         eventDate = new Date(evaluation.match.startTime);
-        eventType = 'match';
+        eventType = EventType.MATCH;
         eventId = evaluation.match.id;
       } else {
         continue;
