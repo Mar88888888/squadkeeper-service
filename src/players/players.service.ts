@@ -177,8 +177,8 @@ export class PlayersService {
   ): Promise<AttendanceStats> {
     const query = this.attendanceRepository
       .createQueryBuilder('a')
-      .leftJoin('a.training', 't')
-      .leftJoin('a.match', 'm')
+      .leftJoinAndSelect('a.training', 't')
+      .leftJoinAndSelect('a.match', 'm')
       .where('a.player.id = :playerId', { playerId });
 
     if (dateRange.start && dateRange.end) {
@@ -199,11 +199,11 @@ export class PlayersService {
       totalMatches: 0,
     };
 
-    for (const a of allAttendances) {
-      if (a.training) stats.totalTrainings++;
-      if (a.match) stats.totalMatches++;
+    for (const attendance of allAttendances) {
+      if (attendance.training) stats.totalTrainings++;
+      if (attendance.match) stats.totalMatches++;
 
-      if (a.isPresent) {
+      if (attendance.isPresent) {
         stats.present++;
       } else {
         stats.absent++;
@@ -213,6 +213,217 @@ export class PlayersService {
     calculateAttendanceRate(stats);
 
     return stats;
+  }
+
+  private async getMatchesPlayedCountBatch(
+    playerIds: string[],
+    dateRange: DateRange,
+  ): Promise<Map<string, number>> {
+    if (playerIds.length === 0) return new Map();
+
+    const query = this.attendanceRepository
+      .createQueryBuilder('a')
+      .select('a.playerId', 'playerId')
+      .addSelect('COUNT(*)', 'count')
+      .innerJoin('a.match', 'm')
+      .where('a.playerId IN (:...playerIds)', { playerIds })
+      .andWhere('a.isPresent = true')
+      .groupBy('a.playerId');
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const results = await query.getRawMany();
+    return new Map(results.map((r) => [r.playerId, parseInt(r.count)]));
+  }
+
+  private async getGoalsCountBatch(
+    playerIds: string[],
+    dateRange: DateRange,
+  ): Promise<Map<string, number>> {
+    if (playerIds.length === 0) return new Map();
+
+    const query = this.goalsRepository
+      .createQueryBuilder('g')
+      .select('g.scorerId', 'playerId')
+      .addSelect('COUNT(*)', 'count')
+      .innerJoin('g.match', 'm')
+      .where('g.scorerId IN (:...playerIds)', { playerIds })
+      .andWhere('g.isOwnGoal = false')
+      .groupBy('g.scorerId');
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const results = await query.getRawMany();
+    return new Map(results.map((r) => [r.playerId, parseInt(r.count)]));
+  }
+
+  private async getAssistsCountBatch(
+    playerIds: string[],
+    dateRange: DateRange,
+  ): Promise<Map<string, number>> {
+    if (playerIds.length === 0) return new Map();
+
+    const query = this.goalsRepository
+      .createQueryBuilder('g')
+      .select('g.assistId', 'playerId')
+      .addSelect('COUNT(*)', 'count')
+      .innerJoin('g.match', 'm')
+      .where('g.assistId IN (:...playerIds)', { playerIds })
+      .groupBy('g.assistId');
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const results = await query.getRawMany();
+    return new Map(results.map((r) => [r.playerId, parseInt(r.count)]));
+  }
+
+  private async getCleanSheetsCountBatch(
+    defensivePlayerIds: string[],
+    dateRange: DateRange,
+  ): Promise<Map<string, number>> {
+    if (defensivePlayerIds.length === 0) return new Map();
+
+    const query = this.attendanceRepository
+      .createQueryBuilder('a')
+      .select('a.playerId', 'playerId')
+      .addSelect('COUNT(*)', 'count')
+      .innerJoin('a.match', 'm')
+      .where('a.playerId IN (:...playerIds)', { playerIds: defensivePlayerIds })
+      .andWhere('a.isPresent = true')
+      .andWhere('m.homeGoals IS NOT NULL')
+      .andWhere('m.awayGoals IS NOT NULL')
+      .andWhere(
+        '((m.isHome = true AND m.awayGoals = 0) OR (m.isHome = false AND m.homeGoals = 0))',
+      )
+      .groupBy('a.playerId');
+
+    if (dateRange.start && dateRange.end) {
+      query.andWhere('m.startTime BETWEEN :start AND :end', {
+        start: dateRange.start,
+        end: dateRange.end,
+      });
+    }
+
+    const results = await query.getRawMany();
+    return new Map(results.map((r) => [r.playerId, parseInt(r.count)]));
+  }
+
+  private async getAttendanceStatsBatch(
+    playerIds: string[],
+    dateRange: DateRange,
+  ): Promise<Map<string, AttendanceStats>> {
+    if (playerIds.length === 0) return new Map();
+
+    const attendances = await this.attendanceRepository.find({
+      where: { player: { id: In(playerIds) } },
+      relations: ['player', 'training', 'match'],
+    });
+
+    // Filter by date range if specified
+    const { start, end } = dateRange;
+    const filtered =
+      start && end
+        ? attendances.filter((a) => {
+            const eventTime = a.training?.startTime || a.match?.startTime;
+            return eventTime && eventTime >= start && eventTime <= end;
+          })
+        : attendances;
+
+    // Group by player and calculate stats
+    const statsMap = new Map<string, AttendanceStats>();
+
+    // Initialize stats for all players (including those with no attendance)
+    for (const playerId of playerIds) {
+      statsMap.set(playerId, {
+        total: 0,
+        present: 0,
+        absent: 0,
+        rate: 0,
+        totalTrainings: 0,
+        totalMatches: 0,
+      });
+    }
+
+    for (const attendance of filtered) {
+      const playerId = attendance.player.id;
+      const stats = statsMap.get(playerId)!;
+
+      stats.total++;
+      if (attendance.training) stats.totalTrainings++;
+      if (attendance.match) stats.totalMatches++;
+      if (attendance.isPresent) stats.present++;
+      else stats.absent++;
+    }
+
+    // Calculate rates
+    for (const stats of statsMap.values()) {
+      calculateAttendanceRate(stats);
+    }
+
+    return statsMap;
+  }
+
+  private async getPlayerStatsBatch(
+    players: Player[],
+    period: StatsPeriod,
+  ): Promise<Map<string, PlayerStatsResponse>> {
+    if (players.length === 0) return new Map();
+
+    const playerIds = players.map((p) => p.id);
+    const defensivePlayerIds = players
+      .filter((p) => DEFENSIVE_POSITIONS.includes(p.position))
+      .map((p) => p.id);
+
+    const dateRange = getDateRangeForPeriod(period);
+
+    const [matchesPlayed, goals, assists, cleanSheets, attendance] =
+      await Promise.all([
+        this.getMatchesPlayedCountBatch(playerIds, dateRange),
+        this.getGoalsCountBatch(playerIds, dateRange),
+        this.getAssistsCountBatch(playerIds, dateRange),
+        this.getCleanSheetsCountBatch(defensivePlayerIds, dateRange),
+        this.getAttendanceStatsBatch(playerIds, dateRange),
+      ]);
+
+    const result = new Map<string, PlayerStatsResponse>();
+
+    for (const player of players) {
+      result.set(player.id, {
+        playerId: player.id,
+        playerName: `${player.firstName} ${player.lastName}`,
+        position: player.position,
+        matchesPlayed: matchesPlayed.get(player.id) || 0,
+        goals: goals.get(player.id) || 0,
+        assists: assists.get(player.id) || 0,
+        cleanSheets: cleanSheets.get(player.id) || 0,
+        attendance: attendance.get(player.id) || {
+          total: 0,
+          present: 0,
+          absent: 0,
+          rate: 0,
+          totalTrainings: 0,
+          totalMatches: 0,
+        },
+        period,
+      });
+    }
+
+    return result;
   }
 
   async getPlayerStats(
@@ -258,30 +469,27 @@ export class PlayersService {
       order: { name: 'ASC' },
     });
 
-    const result: TeamStatsResponse[] = [];
+    // Collect all players across all groups
+    const allPlayers = groups.flatMap((g) => g.players);
 
-    for (const group of groups) {
-      const playerStats: PlayerStatsResponse[] = [];
+    // Batch fetch all stats
+    const statsMap = await this.getPlayerStatsBatch(allPlayers, period);
 
-      for (const player of group.players) {
-        const stats = await this.getPlayerStats(player.id, period);
-        playerStats.push(stats);
-      }
+    return groups.map((group) => {
+      const playerStats = group.players
+        .map((player) => statsMap.get(player.id)!)
+        .sort((a, b) => {
+          if (b.goals !== a.goals) return b.goals - a.goals;
+          return b.assists - a.assists;
+        });
 
-      playerStats.sort((a, b) => {
-        if (b.goals !== a.goals) return b.goals - a.goals;
-        return b.assists - a.assists;
-      });
-
-      result.push({
+      return {
         groupId: group.id,
         groupName: group.name,
         players: playerStats,
         period,
-      });
-    }
-
-    return result;
+      };
+    });
   }
 
   async getChildrenStats(
@@ -298,18 +506,16 @@ export class PlayersService {
       order: { firstName: 'ASC' },
     });
 
-    const children: ChildInfo[] = await Promise.all(
-      players.map(async (child): Promise<ChildInfo> => {
-        const stats = await this.getPlayerStats(child.id, period);
-        return {
-          id: child.id,
-          firstName: child.firstName,
-          lastName: child.lastName,
-          groupId: child.group?.id || null,
-          stats: stats || null,
-        };
-      }),
-    );
+    // Batch fetch all stats
+    const statsMap = await this.getPlayerStatsBatch(players, period);
+
+    const children: ChildInfo[] = players.map((child) => ({
+      id: child.id,
+      firstName: child.firstName,
+      lastName: child.lastName,
+      groupId: child.group?.id || null,
+      stats: statsMap.get(child.id) || null,
+    }));
 
     return { children };
   }

@@ -66,12 +66,16 @@ export class AttendanceController {
 
   @Get('my/stats')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.PLAYER, UserRole.PARENT)
+  @Roles(UserRole.PLAYER)
   getMyStats(@CurrentUser() user: AuthenticatedUser) {
-    return this.attendanceService.getMyStatsForUser(
-      user.role,
-      user.playerId,
-      user.children,
-    );
+    return this.attendanceService.getPlayerStats([user.playerId!]);
+  }
+
+  @Get('my/children/stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(UserRole.PARENT)
+  getChildrenStats(@CurrentUser() user: AuthenticatedUser) {
+    const childIds = user.children?.map((c) => c.id) ?? [];
+    return this.attendanceService.getStatsPerPlayer(childIds);
   }
 }

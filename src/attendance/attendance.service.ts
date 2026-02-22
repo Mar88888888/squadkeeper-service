@@ -19,6 +19,7 @@ import { TrainingsService } from '../events/trainings.service';
 import { MatchesService } from '../events/matches.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ChildInfo } from '../auth/dto/authenticated-user.dto';
+import { calculateAttendanceRate } from '../common/utils/attendance.util';
 
 export interface AttendanceStats {
   total: number;
@@ -71,6 +72,10 @@ export class AttendanceService {
           );
           results.push(attendance);
         }
+
+        this.logger.log(
+          `Marked attendance for ${results.length} players on ${dto.eventType} ${dto.eventId}`,
+        );
 
         return results;
       });
@@ -271,23 +276,21 @@ export class AttendanceService {
       totalMatches: 0,
     };
 
-    for (const a of attendances) {
-      if (a.training) {
+    for (const attendance of attendances) {
+      if (attendance.training) {
         stats.totalTrainings++;
-      } else if (a.match) {
+      } else if (attendance.match) {
         stats.totalMatches++;
       }
 
-      if (a.isPresent) {
+      if (attendance.isPresent) {
         stats.present++;
       } else {
         stats.absent++;
       }
     }
 
-    if (stats.total > 0) {
-      stats.rate = Math.round((stats.present / stats.total) * 100);
-    }
+    calculateAttendanceRate(stats);
 
     return stats;
   }
@@ -310,22 +313,5 @@ export class AttendanceService {
       }
       throw error;
     }
-  }
-
-  async getMyStatsForUser(
-    role: UserRole,
-    playerId?: string,
-    children?: ChildInfo[],
-  ): Promise<AttendanceStats | PlayerAttendanceStats[]> {
-    if (role === UserRole.PLAYER && playerId) {
-      return this.getPlayerStats([playerId]);
-    }
-
-    if (role === UserRole.PARENT && children?.length) {
-      const childIds = children.map((c) => c.id);
-      return this.getStatsPerPlayer(childIds);
-    }
-
-    throw new ForbiddenException('Access denied');
   }
 }

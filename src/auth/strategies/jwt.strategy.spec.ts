@@ -53,6 +53,16 @@ describe('JwtStrategy', () => {
 
       expect(usersRepository.findOne).toHaveBeenCalledWith({
         where: { id: 'user-123' },
+        relations: [
+          'coach',
+          'coach.headGroups',
+          'coach.assistantGroups',
+          'player',
+          'player.group',
+          'parent',
+          'parent.children',
+          'parent.children.group',
+        ],
       });
       expect(result).toEqual({
         id: 'user-123',
@@ -60,6 +70,10 @@ describe('JwtStrategy', () => {
         firstName: 'John',
         lastName: 'Doe',
         role: UserRole.PLAYER,
+        groupIds: [],
+        playerId: undefined,
+        coachId: undefined,
+        children: undefined,
       });
     });
 

@@ -1,4 +1,10 @@
-import { IsBoolean, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class AttendanceRecordDto {
   @IsUUID()
@@ -9,5 +15,6 @@ export class AttendanceRecordDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(500)
   notes?: string;
 }

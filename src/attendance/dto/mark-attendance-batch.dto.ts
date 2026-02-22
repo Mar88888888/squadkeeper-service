@@ -5,6 +5,7 @@ import {
   IsUUID,
   ValidateNested,
   ArrayMinSize,
+  ArrayMaxSize,
 } from 'class-validator';
 import { AttendanceRecordDto } from './attendance-record.dto';
 import { EventType } from '../../events/enums/event-type.enum';
@@ -18,6 +19,7 @@ export class MarkAttendanceBatchDto {
 
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(100)
   @ValidateNested({ each: true })
   @Type(() => AttendanceRecordDto)
   records: AttendanceRecordDto[];
