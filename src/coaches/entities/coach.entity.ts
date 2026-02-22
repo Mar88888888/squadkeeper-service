@@ -10,11 +10,12 @@ import { PersonEntity } from '../../common/entities/person.entity';
 import { User } from '../../users/entities/user.entity';
 import { Group } from '../../groups/entities/group.entity';
 import { Evaluation } from '../../evaluations/entities/evaluation.entity';
+import { LicenseLevel } from '../dto/create-coach.dto';
 
 @Entity('coaches')
 export class Coach extends PersonEntity {
-  @Column()
-  licenseLevel: string;
+  @Column({ type: 'varchar' })
+  licenseLevel: LicenseLevel;
 
   @Column({ type: 'int' })
   experienceYears: number;

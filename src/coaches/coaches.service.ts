@@ -1,7 +1,7 @@
 import {
   Injectable,
   ConflictException,
-  BadRequestException,
+  InternalServerErrorException,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -24,6 +24,25 @@ export class CoachesService {
     private dataSource: DataSource,
   ) {}
 
+  /**
+   * Syncs name fields between Coach and User entities.
+   * Names are stored in both for query convenience, this ensures consistency.
+   */
+  private syncPersonNames(
+    coach: Coach,
+    user: User,
+    data: { firstName?: string; lastName?: string },
+  ): void {
+    if (data.firstName !== undefined) {
+      coach.firstName = data.firstName;
+      user.firstName = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      coach.lastName = data.lastName;
+      user.lastName = data.lastName;
+    }
+  }
+
   async findAll(): Promise<Coach[]> {
     return this.coachesRepository.find({
       relations: ['user'],
@@ -32,27 +51,17 @@ export class CoachesService {
   }
 
   async remove(id: string): Promise<void> {
-    const coach = await this.coachesRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
-
-    if (!coach) {
-      throw new NotFoundException('Coach not found');
-    }
-
     try {
       await this.dataSource.transaction(async (manager) => {
-        const userId = coach.user?.id;
+        const coach = await manager.findOne(Coach, {
+          where: { id },
+          relations: ['user'],
+          lock: { mode: 'pessimistic_write' },
+        });
 
-        if (userId) {
-          await manager
-            .createQueryBuilder()
-            .update(User)
-            .set({ coach: null as unknown as Coach })
-            .where('id = :userId', { userId })
-            .execute();
-        }
+        if (!coach) return;
+
+        const userId = coach.user?.id;
 
         await manager.remove(coach);
 
@@ -62,7 +71,7 @@ export class CoachesService {
       });
     } catch (error) {
       this.logger.error('Failed to delete coach', error);
-      throw new BadRequestException('Failed to delete coach');
+      throw new InternalServerErrorException('Failed to delete coach');
     }
   }
 
@@ -83,26 +92,23 @@ export class CoachesService {
           email: createCoachDto.email,
           passwordHash: hashedPassword,
           role: UserRole.COACH,
-          firstName: createCoachDto.firstName,
-          lastName: createCoachDto.lastName,
         });
-
-        await manager.save(user);
 
         const coach = manager.create(Coach, {
           licenseLevel: createCoachDto.licenseLevel,
           experienceYears: createCoachDto.experienceYears,
-          firstName: createCoachDto.firstName,
-          lastName: createCoachDto.lastName,
           phoneNumber: createCoachDto.phoneNumber,
           dateOfBirth: new Date(createCoachDto.dateOfBirth),
           user,
         });
 
-        await manager.save(coach);
+        this.syncPersonNames(coach, user, {
+          firstName: createCoachDto.firstName,
+          lastName: createCoachDto.lastName,
+        });
 
-        user.coach = coach;
         await manager.save(user);
+        await manager.save(coach);
 
         return coach;
       });
@@ -111,22 +117,23 @@ export class CoachesService {
         throw error;
       }
       this.logger.error('Failed to create coach', error);
-      throw new BadRequestException('Failed to create coach');
+      throw new InternalServerErrorException('Failed to create coach');
     }
   }
 
   async update(id: string, updateCoachDto: UpdateCoachDto): Promise<Coach> {
-    const coach = await this.coachesRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
-
-    if (!coach) {
-      throw new NotFoundException('Coach not found');
-    }
-
     try {
       return await this.dataSource.transaction(async (manager) => {
+        const coach = await manager.findOne(Coach, {
+          where: { id },
+          relations: ['user'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!coach) {
+          throw new NotFoundException('Coach not found');
+        }
+
         const { email, password, firstName, lastName } = updateCoachDto;
 
         if (coach.user) {
@@ -141,27 +148,24 @@ export class CoachesService {
           if (password !== undefined) {
             coach.user.passwordHash = await bcrypt.hash(password, 10);
           }
-          if (firstName !== undefined) coach.user.firstName = firstName;
-          if (lastName !== undefined) coach.user.lastName = lastName;
-
-          await manager.save(coach.user);
         }
 
-        if (firstName !== undefined) coach.firstName = firstName;
-        if (lastName !== undefined) coach.lastName = lastName;
+        this.syncPersonNames(coach, coach.user, { firstName, lastName });
+
         if (updateCoachDto.phoneNumber !== undefined) coach.phoneNumber = updateCoachDto.phoneNumber;
         if (updateCoachDto.dateOfBirth !== undefined) coach.dateOfBirth = new Date(updateCoachDto.dateOfBirth);
         if (updateCoachDto.licenseLevel !== undefined) coach.licenseLevel = updateCoachDto.licenseLevel;
         if (updateCoachDto.experienceYears !== undefined) coach.experienceYears = updateCoachDto.experienceYears;
 
-        await manager.save(coach);
+        await manager.save([coach.user, coach]);
 
         return coach;
       });
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update coach', error);
-      throw new BadRequestException('Failed to update coach');
+      throw new InternalServerErrorException('Failed to update coach');
     }
   }
 }

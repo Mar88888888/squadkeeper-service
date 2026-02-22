@@ -1,29 +1,12 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
-import { Repository } from 'typeorm';
-import { UnauthorizedException } from '@nestjs/common';
-import { JwtStrategy } from './jwt.strategy';
-import { User } from '../../users/entities/user.entity';
+import { JwtStrategy, JwtPayload } from './jwt.strategy';
 import { UserRole } from '../../users/enums/user-role.enum';
 
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;
-  let usersRepository: jest.Mocked<Repository<User>>;
-
-  const mockUser = {
-    id: 'user-123',
-    email: 'test@example.com',
-    firstName: 'John',
-    lastName: 'Doe',
-    role: UserRole.PLAYER,
-  } as unknown as User;
 
   beforeEach(async () => {
-    const mockUsersRepository = {
-      findOne: jest.fn(),
-    };
-
     const mockConfigService = {
       get: jest.fn().mockReturnValue('test-jwt-secret'),
     };
@@ -31,98 +14,109 @@ describe('JwtStrategy', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         JwtStrategy,
-        { provide: getRepositoryToken(User), useValue: mockUsersRepository },
         { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
     strategy = module.get<JwtStrategy>(JwtStrategy);
-    usersRepository = module.get(getRepositoryToken(User));
-  });
-
-  afterEach(() => {
-    jest.clearAllMocks();
   });
 
   describe('validate', () => {
-    it('should return user data when user exists', async () => {
-      usersRepository.findOne.mockResolvedValue(mockUser);
+    it('should return user data from JWT payload', () => {
+      const payload: JwtPayload = {
+        sub: 'user-123',
+        email: 'test@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: UserRole.PLAYER,
+        groupIds: ['group-1', 'group-2'],
+        playerId: 'player-123',
+      };
 
-      const payload = { sub: 'user-123', email: 'test@example.com' };
-      const result = await strategy.validate(payload);
+      const result = strategy.validate(payload);
 
-      expect(usersRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'user-123' },
-        relations: [
-          'coach',
-          'coach.headGroups',
-          'coach.assistantGroups',
-          'player',
-          'player.group',
-          'parent',
-          'parent.children',
-          'parent.children.group',
-        ],
-      });
       expect(result).toEqual({
         id: 'user-123',
         email: 'test@example.com',
         firstName: 'John',
         lastName: 'Doe',
         role: UserRole.PLAYER,
-        groupIds: [],
-        playerId: undefined,
+        groupIds: ['group-1', 'group-2'],
+        playerId: 'player-123',
         coachId: undefined,
         children: undefined,
       });
     });
 
-    it('should throw UnauthorizedException when user not found', async () => {
-      usersRepository.findOne.mockResolvedValue(null);
+    it('should handle coach user with coachId', () => {
+      const payload: JwtPayload = {
+        sub: 'user-123',
+        email: 'coach@example.com',
+        firstName: 'Jane',
+        lastName: 'Coach',
+        role: UserRole.COACH,
+        groupIds: ['group-1'],
+        coachId: 'coach-456',
+      };
 
-      const payload = { sub: 'nonexistent', email: 'test@example.com' };
-
-      await expect(strategy.validate(payload)).rejects.toThrow(UnauthorizedException);
-    });
-
-    it('should validate admin user', async () => {
-      const adminUser = { ...mockUser, role: UserRole.ADMIN };
-      usersRepository.findOne.mockResolvedValue(adminUser as User);
-
-      const payload = { sub: 'user-123' };
-      const result = await strategy.validate(payload);
-
-      expect(result.role).toBe(UserRole.ADMIN);
-    });
-
-    it('should validate coach user', async () => {
-      const coachUser = { ...mockUser, role: UserRole.COACH };
-      usersRepository.findOne.mockResolvedValue(coachUser as User);
-
-      const payload = { sub: 'user-123' };
-      const result = await strategy.validate(payload);
+      const result = strategy.validate(payload);
 
       expect(result.role).toBe(UserRole.COACH);
+      expect(result.coachId).toBe('coach-456');
+      expect(result.groupIds).toEqual(['group-1']);
     });
 
-    it('should validate parent user', async () => {
-      const parentUser = { ...mockUser, role: UserRole.PARENT };
-      usersRepository.findOne.mockResolvedValue(parentUser as User);
+    it('should handle parent user with children', () => {
+      const payload: JwtPayload = {
+        sub: 'user-123',
+        email: 'parent@example.com',
+        firstName: 'Parent',
+        lastName: 'User',
+        role: UserRole.PARENT,
+        groupIds: ['group-1', 'group-2'],
+        children: [
+          { id: 'child-1', groupId: 'group-1' },
+          { id: 'child-2', groupId: 'group-2' },
+        ],
+      };
 
-      const payload = { sub: 'user-123' };
-      const result = await strategy.validate(payload);
+      const result = strategy.validate(payload);
 
       expect(result.role).toBe(UserRole.PARENT);
+      expect(result.children).toEqual([
+        { id: 'child-1', groupId: 'group-1' },
+        { id: 'child-2', groupId: 'group-2' },
+      ]);
     });
 
-    it('should not include password in returned user', async () => {
-      const userWithPassword = { ...mockUser, passwordHash: 'secret' };
-      usersRepository.findOne.mockResolvedValue(userWithPassword as User);
+    it('should handle admin user', () => {
+      const payload: JwtPayload = {
+        sub: 'admin-123',
+        email: 'admin@example.com',
+        firstName: 'Admin',
+        lastName: 'User',
+        role: UserRole.ADMIN,
+        groupIds: [],
+      };
 
-      const payload = { sub: 'user-123' };
-      const result = await strategy.validate(payload);
+      const result = strategy.validate(payload);
 
-      expect(result).not.toHaveProperty('passwordHash');
+      expect(result.role).toBe(UserRole.ADMIN);
+      expect(result.groupIds).toEqual([]);
+    });
+
+    it('should default groupIds to empty array if undefined', () => {
+      const payload = {
+        sub: 'user-123',
+        email: 'test@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        role: UserRole.PLAYER,
+      } as JwtPayload;
+
+      const result = strategy.validate(payload);
+
+      expect(result.groupIds).toEqual([]);
     });
   });
 });

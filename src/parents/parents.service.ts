@@ -27,6 +27,25 @@ export class ParentsService {
     private dataSource: DataSource,
   ) {}
 
+  /**
+   * Syncs name fields between Parent and User entities.
+   * Names are stored in both for query convenience, this ensures consistency.
+   */
+  private syncPersonNames(
+    parent: Parent,
+    user: User,
+    data: { firstName?: string; lastName?: string },
+  ): void {
+    if (data.firstName !== undefined) {
+      parent.firstName = data.firstName;
+      user.firstName = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      parent.lastName = data.lastName;
+      user.lastName = data.lastName;
+    }
+  }
+
   async findAll(): Promise<Parent[]> {
     return this.parentsRepository.find({
       relations: ['user', 'children'],
@@ -48,17 +67,16 @@ export class ParentsService {
   }
 
   async remove(id: string): Promise<void> {
-    const parent = await this.parentsRepository.findOne({
-      where: { id },
-      relations: ['user', 'children'],
-    });
-
-    if (!parent) {
-      throw new NotFoundException('Parent not found');
-    }
-
     try {
       await this.dataSource.transaction(async (manager) => {
+        const parent = await manager.findOne(Parent, {
+          where: { id },
+          relations: ['user', 'children'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!parent) return;
+
         if (parent.children && parent.children.length > 0) {
           await manager
             .createQueryBuilder()
@@ -69,15 +87,6 @@ export class ParentsService {
         }
 
         const userId = parent.user?.id;
-
-        if (userId) {
-          await manager
-            .createQueryBuilder()
-            .update(User)
-            .set({ parent: null as unknown as Parent })
-            .where('id = :userId', { userId })
-            .execute();
-        }
 
         await manager.remove(parent);
 
@@ -168,23 +177,20 @@ export class ParentsService {
           email: createParentDto.email,
           passwordHash: hashedPassword,
           role: UserRole.PARENT,
-          firstName: createParentDto.firstName,
-          lastName: createParentDto.lastName,
         });
 
-        await manager.save(user);
-
         const parent = manager.create(Parent, {
-          firstName: createParentDto.firstName,
-          lastName: createParentDto.lastName,
           phoneNumber: createParentDto.phoneNumber,
           user,
         });
 
-        await manager.save(parent);
+        this.syncPersonNames(parent, user, {
+          firstName: createParentDto.firstName,
+          lastName: createParentDto.lastName,
+        });
 
-        user.parent = parent;
         await manager.save(user);
+        await manager.save(parent);
 
         if (
           createParentDto.childrenIds &&
@@ -221,17 +227,18 @@ export class ParentsService {
   }
 
   async update(id: string, updateParentDto: UpdateParentDto): Promise<Parent> {
-    const parent = await this.parentsRepository.findOne({
-      where: { id },
-      relations: ['user', 'children'],
-    });
-
-    if (!parent) {
-      throw new NotFoundException('Parent not found');
-    }
-
     try {
       return await this.dataSource.transaction(async (manager) => {
+        const parent = await manager.findOne(Parent, {
+          where: { id },
+          relations: ['user', 'children'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!parent) {
+          throw new NotFoundException('Parent not found');
+        }
+
         const { email, password, firstName, lastName } = updateParentDto;
 
         if (parent.user) {
@@ -246,21 +253,18 @@ export class ParentsService {
           if (password !== undefined) {
             parent.user.passwordHash = await bcrypt.hash(password, 10);
           }
-          if (firstName !== undefined) parent.user.firstName = firstName;
-          if (lastName !== undefined) parent.user.lastName = lastName;
-
-          await manager.save(parent.user);
         }
 
-        if (firstName !== undefined) parent.firstName = firstName;
-        if (lastName !== undefined) parent.lastName = lastName;
+        this.syncPersonNames(parent, parent.user, { firstName, lastName });
+
         if (updateParentDto.phoneNumber !== undefined) parent.phoneNumber = updateParentDto.phoneNumber;
 
-        await manager.save(parent);
+        await manager.save([parent.user, parent]);
 
         return parent;
       });
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update parent', error);
       throw new BadRequestException('Failed to update parent');

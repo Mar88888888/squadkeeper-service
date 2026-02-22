@@ -1,4 +1,4 @@
-import { Entity, Column, OneToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, OneToOne } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { UserRole } from '../enums/user-role.enum';
 import { Player } from '../../players/entities/player.entity';
@@ -27,14 +27,11 @@ export class User extends BaseEntity {
   role: UserRole;
 
   @OneToOne(() => Player, (player) => player.user, { nullable: true })
-  @JoinColumn()
   player: Player;
 
   @OneToOne(() => Coach, (coach) => coach.user, { nullable: true })
-  @JoinColumn()
   coach: Coach;
 
   @OneToOne(() => Parent, (parent) => parent.user, { nullable: true })
-  @JoinColumn()
   parent: Parent;
 }

@@ -1,10 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { User } from '../../users/entities/user.entity';
 import { UserRole } from '../../users/enums/user-role.enum';
 
 export interface JwtPayload {
@@ -13,17 +10,17 @@ export interface JwtPayload {
   role: UserRole;
   firstName: string;
   lastName: string;
+  groupIds: string[];
+  playerId?: string;
+  coachId?: string;
+  children?: { id: string; groupId?: string }[];
   iat?: number;
   exp?: number;
 }
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(
-    private configService: ConfigService,
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
-  ) {
+  constructor(private configService: ConfigService) {
     const jwtSecret = configService.get<string>('JWT_SECRET');
     if (!jwtSecret) {
       throw new Error('JWT_SECRET environment variable is required');
@@ -35,61 +32,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: JwtPayload) {
-    const user = await this.usersRepository.findOne({
-      where: { id: payload.sub },
-      relations: [
-        'coach',
-        'coach.headGroups',
-        'coach.assistantGroups',
-        'player',
-        'player.group',
-        'parent',
-        'parent.children',
-        'parent.children.group',
-      ],
-    });
-
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-
-    const groupIds = this.extractGroupIds(user);
-
+  validate(payload: JwtPayload) {
     return {
-      id: user.id,
-      email: user.email,
-      role: user.role,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      groupIds,
-      playerId: user.player?.id,
-      coachId: user.coach?.id,
-      children: user.parent?.children?.map((c) => ({
-        id: c.id,
-        groupId: c.group?.id,
-      })),
+      id: payload.sub,
+      email: payload.email,
+      role: payload.role,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      groupIds: payload.groupIds ?? [],
+      playerId: payload.playerId,
+      coachId: payload.coachId,
+      children: payload.children,
     };
-  }
-
-  private extractGroupIds(user: User): string[] {
-    const groupIds = new Set<string>();
-
-    if (user.role === UserRole.COACH && user.coach) {
-      user.coach.headGroups?.forEach((g) => groupIds.add(g.id));
-      user.coach.assistantGroups?.forEach((g) => groupIds.add(g.id));
-    }
-
-    if (user.role === UserRole.PLAYER && user.player?.group) {
-      groupIds.add(user.player.group.id);
-    }
-
-    if (user.role === UserRole.PARENT && user.parent?.children) {
-      user.parent.children.forEach((child) => {
-        if (child.group) groupIds.add(child.group.id);
-      });
-    }
-
-    return Array.from(groupIds);
   }
 }

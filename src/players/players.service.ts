@@ -55,6 +55,25 @@ export class PlayersService {
     private dataSource: DataSource,
   ) {}
 
+  /**
+   * Syncs name fields between Player and User entities.
+   * Names are stored in both for query convenience, this ensures consistency.
+   */
+  private syncPersonNames(
+    player: Player,
+    user: User,
+    data: { firstName?: string; lastName?: string },
+  ): void {
+    if (data.firstName !== undefined) {
+      player.firstName = data.firstName;
+      user.firstName = data.firstName;
+    }
+    if (data.lastName !== undefined) {
+      player.lastName = data.lastName;
+      user.lastName = data.lastName;
+    }
+  }
+
   async findOne(playerId: string): Promise<Player> {
     const player = await this.playersRepository.findOne({
       where: { id: playerId },
@@ -528,27 +547,17 @@ export class PlayersService {
   }
 
   async remove(id: string): Promise<void> {
-    const player = await this.playersRepository.findOne({
-      where: { id },
-      relations: ['user'],
-    });
-
-    if (!player) {
-      throw new NotFoundException('Player not found');
-    }
-
     try {
       await this.dataSource.transaction(async (manager) => {
-        const userId = player.user?.id;
+        const player = await manager.findOne(Player, {
+          where: { id },
+          relations: ['user'],
+          lock: { mode: 'pessimistic_write' },
+        });
 
-        if (userId) {
-          await manager
-            .createQueryBuilder()
-            .update(User)
-            .set({ player: null as unknown as Player })
-            .where('id = :userId', { userId })
-            .execute();
-        }
+        if (!player) return;
+
+        const userId = player.user?.id;
 
         await manager.remove(player);
 
@@ -579,28 +588,25 @@ export class PlayersService {
           email: createPlayerDto.email,
           passwordHash: hashedPassword,
           role: UserRole.PLAYER,
-          firstName: createPlayerDto.firstName,
-          lastName: createPlayerDto.lastName,
         });
-
-        await manager.save(user);
 
         const player = manager.create(Player, {
           position: createPlayerDto.position,
           height: createPlayerDto.height,
           weight: createPlayerDto.weight,
           strongFoot: createPlayerDto.strongFoot,
-          firstName: createPlayerDto.firstName,
-          lastName: createPlayerDto.lastName,
           phoneNumber: createPlayerDto.phoneNumber,
           dateOfBirth: new Date(createPlayerDto.dateOfBirth),
           user,
         });
 
-        await manager.save(player);
+        this.syncPersonNames(player, user, {
+          firstName: createPlayerDto.firstName,
+          lastName: createPlayerDto.lastName,
+        });
 
-        user.player = player;
         await manager.save(user);
+        await manager.save(player);
 
         return player;
       });
@@ -614,17 +620,18 @@ export class PlayersService {
   }
 
   async update(id: string, updatePlayerDto: UpdatePlayerDto): Promise<Player> {
-    const player = await this.playersRepository.findOne({
-      where: { id },
-      relations: ['user', 'group', 'parent'],
-    });
-
-    if (!player) {
-      throw new NotFoundException('Player not found');
-    }
-
     try {
       return await this.dataSource.transaction(async (manager) => {
+        const player = await manager.findOne(Player, {
+          where: { id },
+          relations: ['user', 'group', 'parent'],
+          lock: { mode: 'pessimistic_write' },
+        });
+
+        if (!player) {
+          throw new NotFoundException('Player not found');
+        }
+
         const { email, password, firstName, lastName } = updatePlayerDto;
 
         if (player.user) {
@@ -641,14 +648,10 @@ export class PlayersService {
           if (password !== undefined) {
             player.user.passwordHash = await bcrypt.hash(password, 10);
           }
-          if (firstName !== undefined) player.user.firstName = firstName;
-          if (lastName !== undefined) player.user.lastName = lastName;
-
-          await manager.save(player.user);
         }
 
-        if (firstName !== undefined) player.firstName = firstName;
-        if (lastName !== undefined) player.lastName = lastName;
+        this.syncPersonNames(player, player.user, { firstName, lastName });
+
         if (updatePlayerDto.phoneNumber !== undefined)
           player.phoneNumber = updatePlayerDto.phoneNumber;
         if (updatePlayerDto.dateOfBirth !== undefined)
@@ -662,11 +665,12 @@ export class PlayersService {
         if (updatePlayerDto.strongFoot !== undefined)
           player.strongFoot = updatePlayerDto.strongFoot;
 
-        await manager.save(player);
+        await manager.save([player.user, player]);
 
         return player;
       });
     } catch (error) {
+      if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update player', error);
       throw new BadRequestException('Failed to update player');

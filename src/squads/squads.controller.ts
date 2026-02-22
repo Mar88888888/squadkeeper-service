@@ -30,7 +30,7 @@ export class SquadsController {
   constructor(private readonly squadsService: SquadsService) {}
 
   @Post()
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   create(
     @Body() createSquadDto: CreateSquadDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -42,19 +42,19 @@ export class SquadsController {
   }
 
   @Get('group/:groupId')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   findByGroup(@Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.squadsService.findByGroup(groupId);
   }
 
   @Get(':id')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.squadsService.findOne(id);
   }
 
   @Patch(':id')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateSquadDto: UpdateSquadDto,
@@ -63,7 +63,7 @@ export class SquadsController {
   }
 
   @Put(':id/positions')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   updatePositions(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePositionsDto: UpdatePositionsDto,
@@ -72,7 +72,7 @@ export class SquadsController {
   }
 
   @Post(':id/duplicate')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   duplicate(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('name') name: string,
@@ -81,7 +81,7 @@ export class SquadsController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Roles(UserRole.COACH)
   @HttpCode(HttpStatus.NO_CONTENT)
   remove(@Param('id', ParseUUIDPipe) id: string) {
     return this.squadsService.remove(id);
