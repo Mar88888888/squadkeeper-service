@@ -1,27 +1,11 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Coach } from '../coaches/entities/coach.entity';
 import { User } from '../users/entities/user.entity';
-import { Player } from '../players/entities/player.entity';
-import { Parent } from '../parents/entities/parent.entity';
+import { Group } from '../groups/entities/group.entity';
 import { UserRole } from '../users/enums/user-role.enum';
-
-export interface ContactInfo {
-  id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string | null;
-  role: UserRole;
-  groups?: { id: string; name: string }[];
-}
-
-export interface ContactsResponse {
-  coaches: ContactInfo[];
-  admins: ContactInfo[];
-  myCoachIds: string[];
-}
+import { ContactInfo, ContactsResponse } from './dto/contacts-response.dto';
 
 @Injectable()
 export class ContactsService {
@@ -30,14 +14,21 @@ export class ContactsService {
     private coachesRepository: Repository<Coach>,
     @InjectRepository(User)
     private usersRepository: Repository<User>,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
-    @InjectRepository(Parent)
-    private parentsRepository: Repository<Parent>,
+    @InjectRepository(Group)
+    private groupsRepository: Repository<Group>,
   ) {}
 
-  async getContacts(userId: string, userRole: UserRole): Promise<ContactsResponse> {
+  async getContacts(groupIds: string[]): Promise<ContactsResponse> {
     const coaches = await this.coachesRepository.find({
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        phoneNumber: true,
+        user: { email: true },
+        headGroups: { id: true, name: true },
+        assistantGroups: { id: true, name: true },
+      },
       relations: ['user', 'headGroups', 'assistantGroups'],
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
@@ -47,7 +38,7 @@ export class ContactsService {
       order: { lastName: 'ASC', firstName: 'ASC' },
     });
 
-    const myCoachIds = await this.getMyCoachIds(userId, userRole);
+    const myCoachIds = await this.getMyCoachIds(groupIds);
 
     const coachContacts: ContactInfo[] = coaches.map((coach) => ({
       id: coach.id,
@@ -78,60 +69,31 @@ export class ContactsService {
     };
   }
 
-  private async getMyCoachIds(userId: string, userRole: UserRole): Promise<string[]> {
-    if (userRole === UserRole.PLAYER) {
-      const player = await this.playersRepository
-        .createQueryBuilder('player')
-        .innerJoin('player.user', 'user')
-        .leftJoinAndSelect('player.group', 'group')
-        .leftJoinAndSelect('group.headCoach', 'headCoach')
-        .leftJoinAndSelect('group.assistants', 'assistants')
-        .where('user.id = :userId', { userId })
-        .getOne();
-
-      if (!player?.group) {
-        return [];
-      }
-
-      const coachIds: string[] = [];
-      if (player.group.headCoach) {
-        coachIds.push(player.group.headCoach.id);
-      }
-      player.group.assistants?.forEach((assistant) => {
-        coachIds.push(assistant.id);
-      });
-
-      return coachIds;
+  private async getMyCoachIds(groupIds: string[]): Promise<string[]> {
+    if (groupIds.length === 0) {
+      return [];
     }
 
-    if (userRole === UserRole.PARENT) {
-      const parent = await this.parentsRepository
-        .createQueryBuilder('parent')
-        .innerJoin('parent.user', 'user')
-        .leftJoinAndSelect('parent.children', 'children')
-        .leftJoinAndSelect('children.group', 'group')
-        .leftJoinAndSelect('group.headCoach', 'headCoach')
-        .leftJoinAndSelect('group.assistants', 'assistants')
-        .where('user.id = :userId', { userId })
-        .getOne();
+    const groups = await this.groupsRepository.find({
+      where: { id: In(groupIds) },
+      relations: ['headCoach', 'assistants'],
+      select: {
+        id: true,
+        headCoach: { id: true },
+        assistants: { id: true },
+      },
+    });
 
-      if (!parent?.children) {
-        return [];
+    const coachIds = new Set<string>();
+    groups.forEach((group) => {
+      if (group.headCoach) {
+        coachIds.add(group.headCoach.id);
       }
-
-      const coachIds = new Set<string>();
-      parent.children.forEach((child) => {
-        if (child.group?.headCoach) {
-          coachIds.add(child.group.headCoach.id);
-        }
-        child.group?.assistants?.forEach((assistant) => {
-          coachIds.add(assistant.id);
-        });
+      group.assistants?.forEach((assistant) => {
+        coachIds.add(assistant.id);
       });
+    });
 
-      return Array.from(coachIds);
-    }
-
-    return [];
+    return Array.from(coachIds);
   }
 }
