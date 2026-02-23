@@ -50,6 +50,19 @@ export class CoachesService {
     });
   }
 
+  async findOne(id: string): Promise<Coach> {
+    const coach = await this.coachesRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
+
+    if (!coach) {
+      throw new NotFoundException(`Coach with ID ${id} not found`);
+    }
+
+    return coach;
+  }
+
   async remove(id: string): Promise<void> {
     try {
       await this.dataSource.transaction(async (manager) => {
