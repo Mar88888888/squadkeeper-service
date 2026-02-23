@@ -2,21 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
-import { UserRole } from '../../users/enums/user-role.enum';
-
-export interface JwtPayload {
-  sub: string;
-  email: string;
-  role: UserRole;
-  firstName: string;
-  lastName: string;
-  groupIds: string[];
-  playerId?: string;
-  coachId?: string;
-  children?: { id: string; groupId?: string }[];
-  iat?: number;
-  exp?: number;
-}
+import { JwtPayload } from '../dto/jwt-payload.dto';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

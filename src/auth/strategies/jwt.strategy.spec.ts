@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ConfigService } from '@nestjs/config';
-import { JwtStrategy, JwtPayload } from './jwt.strategy';
+import { JwtStrategy } from './jwt.strategy';
+import { JwtPayload } from '../dto/jwt-payload.dto';
 import { UserRole } from '../../users/enums/user-role.enum';
 
 describe('JwtStrategy', () => {
