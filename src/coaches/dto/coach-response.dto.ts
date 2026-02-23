@@ -1,5 +1,13 @@
-import { Expose, Transform } from 'class-transformer';
+import { Expose, Transform, Type } from 'class-transformer';
 import { LicenseLevel } from './create-coach.dto';
+
+class UserDto {
+  @Expose()
+  id: string;
+
+  @Expose()
+  email: string;
+}
 
 export class CoachResponseDto {
   @Expose()
@@ -12,14 +20,20 @@ export class CoachResponseDto {
   lastName: string;
 
   @Expose()
-  @Transform(({ obj }) => obj.user?.email ?? '')
-  email: string;
+  @Type(() => UserDto)
+  user: UserDto;
 
   @Expose()
   phoneNumber: string | null;
 
   @Expose()
-  @Transform(({ obj }) => obj.dateOfBirth?.toISOString().split('T')[0] ?? null)
+  @Transform(({ obj }) => {
+    if (!obj.dateOfBirth) return null;
+    if (obj.dateOfBirth instanceof Date) {
+      return obj.dateOfBirth.toISOString().split('T')[0];
+    }
+    return String(obj.dateOfBirth).split('T')[0];
+  })
   dateOfBirth: string | null;
 
   @Expose()
