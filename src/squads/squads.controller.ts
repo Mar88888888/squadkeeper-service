@@ -11,21 +11,23 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  Request,
 } from '@nestjs/common';
 import { SquadsService } from './squads.service';
 import { CreateSquadDto } from './dto/create-squad.dto';
 import { UpdateSquadDto } from './dto/update-squad.dto';
 import { UpdatePositionsDto } from './dto/update-positions.dto';
+import { SquadResponseDto } from './dto/squad-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('squads')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Serialize(SquadResponseDto)
 export class SquadsController {
   constructor(private readonly squadsService: SquadsService) {}
 
@@ -35,10 +37,7 @@ export class SquadsController {
     @Body() createSquadDto: CreateSquadDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.squadsService.create(createSquadDto, {
-      userId: user.id,
-      role: user.role,
-    });
+    return this.squadsService.create(createSquadDto, user);
   }
 
   @Get('group/:groupId')
@@ -58,8 +57,9 @@ export class SquadsController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateSquadDto: UpdateSquadDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.squadsService.update(id, updateSquadDto);
+    return this.squadsService.update(id, updateSquadDto, user);
   }
 
   @Put(':id/positions')
@@ -67,8 +67,9 @@ export class SquadsController {
   updatePositions(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updatePositionsDto: UpdatePositionsDto,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.squadsService.updatePositions(id, updatePositionsDto);
+    return this.squadsService.updatePositions(id, updatePositionsDto, user);
   }
 
   @Post(':id/duplicate')
@@ -76,14 +77,18 @@ export class SquadsController {
   duplicate(
     @Param('id', ParseUUIDPipe) id: string,
     @Body('name') name: string,
+    @CurrentUser() user: AuthenticatedUser,
   ) {
-    return this.squadsService.duplicate(id, name);
+    return this.squadsService.duplicate(id, name, user);
   }
 
   @Delete(':id')
   @Roles(UserRole.COACH)
   @HttpCode(HttpStatus.NO_CONTENT)
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.squadsService.remove(id);
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.squadsService.remove(id, user);
   }
 }

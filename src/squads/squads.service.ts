@@ -4,16 +4,16 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { Squad } from './entities/squad.entity';
 import { SquadPosition } from './entities/squad-position.entity';
-import { Group } from '../groups/entities/group.entity';
 import { Player } from '../players/entities/player.entity';
-import { Coach } from '../coaches/entities/coach.entity';
+import { GroupsService } from '../groups/groups.service';
+import { CoachesService } from '../coaches/coaches.service';
 import { CreateSquadDto } from './dto/create-squad.dto';
 import { UpdateSquadDto } from './dto/update-squad.dto';
 import { UpdatePositionsDto } from './dto/update-positions.dto';
-import { UserRole } from '../users/enums/user-role.enum';
+import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { Position } from '../players/enums/position.enum';
 
 @Injectable()
@@ -23,44 +23,25 @@ export class SquadsService {
     private squadsRepository: Repository<Squad>,
     @InjectRepository(SquadPosition)
     private positionsRepository: Repository<SquadPosition>,
-    @InjectRepository(Group)
-    private groupsRepository: Repository<Group>,
     @InjectRepository(Player)
     private playersRepository: Repository<Player>,
-    @InjectRepository(Coach)
-    private coachesRepository: Repository<Coach>,
+    private groupsService: GroupsService,
+    private coachesService: CoachesService,
   ) {}
 
   async create(
     createSquadDto: CreateSquadDto,
-    user: { userId: string; role: UserRole },
+    user: AuthenticatedUser,
   ): Promise<Squad> {
-    const group = await this.groupsRepository.findOne({
-      where: { id: createSquadDto.groupId },
-    });
+    const group = await this.groupsService.findOne(createSquadDto.groupId);
 
-    if (!group) {
-      throw new NotFoundException(
-        `Group with ID ${createSquadDto.groupId} not found`,
-      );
+    if (!user.groupIds?.includes(createSquadDto.groupId)) {
+      throw new ForbiddenException('You do not have access to this group');
     }
 
-    if (user.role === UserRole.COACH) {
-      const hasAccess = await this.coachHasAccessToGroup(
-        user.userId,
-        createSquadDto.groupId,
-      );
-      if (!hasAccess) {
-        throw new ForbiddenException('You do not have access to this group');
-      }
-    }
-
-    let createdBy: Coach | null = null;
-    if (user.role === UserRole.COACH) {
-      createdBy = await this.coachesRepository.findOne({
-        where: { user: { id: user.userId } },
-      });
-    }
+    const createdBy = user.coachId
+      ? await this.coachesService.findOne(user.coachId)
+      : null;
 
     const squad = this.squadsRepository.create({
       name: createSquadDto.name,
@@ -109,8 +90,16 @@ export class SquadsService {
     return squad;
   }
 
-  async update(id: string, updateSquadDto: UpdateSquadDto): Promise<Squad> {
+  async update(
+    id: string,
+    updateSquadDto: UpdateSquadDto,
+    user: AuthenticatedUser,
+  ): Promise<Squad> {
     const squad = await this.findOne(id);
+
+    if (!user.groupIds?.includes(squad.group.id)) {
+      throw new ForbiddenException('You do not have access to this squad');
+    }
 
     if (updateSquadDto.name !== undefined) {
       squad.name = updateSquadDto.name;
@@ -126,8 +115,13 @@ export class SquadsService {
   async updatePositions(
     id: string,
     updatePositionsDto: UpdatePositionsDto,
+    user: AuthenticatedUser,
   ): Promise<Squad> {
     const squad = await this.findOne(id);
+
+    if (!user.groupIds?.includes(squad.group.id)) {
+      throw new ForbiddenException('You do not have access to this squad');
+    }
 
     await this.positionsRepository.delete({ squad: { id } });
 
@@ -140,8 +134,16 @@ export class SquadsService {
     return squad;
   }
 
-  async duplicate(id: string, newName: string): Promise<Squad> {
+  async duplicate(
+    id: string,
+    newName: string,
+    user: AuthenticatedUser,
+  ): Promise<Squad> {
     const original = await this.findOne(id);
+
+    if (!user.groupIds?.includes(original.group.id)) {
+      throw new ForbiddenException('You do not have access to this squad');
+    }
 
     const newSquad = this.squadsRepository.create({
       name: newName,
@@ -166,8 +168,13 @@ export class SquadsService {
     return savedSquad;
   }
 
-  async remove(id: string): Promise<void> {
+  async remove(id: string, user: AuthenticatedUser): Promise<void> {
     const squad = await this.findOne(id);
+
+    if (!user.groupIds?.includes(squad.group.id)) {
+      throw new ForbiddenException('You do not have access to this squad');
+    }
+
     await this.squadsRepository.remove(squad);
   }
 
@@ -180,49 +187,31 @@ export class SquadsService {
       orderIndex: number;
     }>,
   ): Promise<SquadPosition[]> {
-    const positions: SquadPosition[] = [];
+    // Batch fetch all players
+    const playerIds = positionsData
+      .map((p) => p.playerId)
+      .filter((id): id is string => !!id);
 
-    for (const posData of positionsData) {
-      let player: Player | null = null;
+    const players =
+      playerIds.length > 0
+        ? await this.playersRepository.find({ where: { id: In(playerIds) } })
+        : [];
+    const playersMap = new Map(players.map((p) => [p.id, p]));
 
-      if (posData.playerId) {
-        player = await this.playersRepository.findOne({
-          where: { id: posData.playerId },
-        });
-      }
-
-      const position = this.positionsRepository.create({
+    // Create all positions
+    const positions = positionsData.map((posData) => {
+      return this.positionsRepository.create({
         squad,
-        player,
+        player: posData.playerId
+          ? playersMap.get(posData.playerId) || null
+          : null,
         role: posData.role as Position,
         isStarter: posData.isStarter,
         orderIndex: posData.orderIndex,
       });
-
-      positions.push(await this.positionsRepository.save(position));
-    }
-
-    return positions;
-  }
-
-  private async coachHasAccessToGroup(
-    userId: string,
-    groupId: string,
-  ): Promise<boolean> {
-    const coach = await this.coachesRepository.findOne({
-      where: { user: { id: userId } },
-      relations: ['headGroups', 'assistantGroups'],
     });
 
-    if (!coach) {
-      return false;
-    }
-
-    const groupIds = [
-      ...coach.headGroups.map((g) => g.id),
-      ...coach.assistantGroups.map((g) => g.id),
-    ];
-
-    return groupIds.includes(groupId);
+    // Batch save
+    return await this.positionsRepository.save(positions);
   }
 }

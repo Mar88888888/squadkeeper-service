@@ -4,13 +4,15 @@ import { SquadsService } from './squads.service';
 import { SquadsController } from './squads.controller';
 import { Squad } from './entities/squad.entity';
 import { SquadPosition } from './entities/squad-position.entity';
-import { Group } from '../groups/entities/group.entity';
 import { Player } from '../players/entities/player.entity';
-import { Coach } from '../coaches/entities/coach.entity';
+import { GroupsModule } from '../groups/groups.module';
+import { CoachesModule } from '../coaches/coaches.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Squad, SquadPosition, Group, Player, Coach]),
+    TypeOrmModule.forFeature([Squad, SquadPosition, Player]),
+    GroupsModule,
+    CoachesModule,
   ],
   controllers: [SquadsController],
   providers: [SquadsService],
