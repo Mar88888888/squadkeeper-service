@@ -3,14 +3,17 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { EvaluationsService } from './evaluations.service';
 import { EvaluationsController } from './evaluations.controller';
-import { Player } from '../players/entities/player.entity';
-import { Parent } from '../parents/entities/parent.entity';
-import { Coach } from '../coaches/entities/coach.entity';
-import { Training } from '../events/entities/training.entity';
-import { Match } from '../events/entities/match.entity';
+import { PlayersModule } from '../players/players.module';
+import { ParentsModule } from '../parents/parents.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Evaluation, Player, Parent, Coach, Training, Match])],
+  imports: [
+    TypeOrmModule.forFeature([Evaluation]),
+    PlayersModule,
+    ParentsModule,
+    EventsModule,
+  ],
   controllers: [EvaluationsController],
   providers: [EvaluationsService],
   exports: [EvaluationsService],

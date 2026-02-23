@@ -6,44 +6,25 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, EntityManager, FindOptionsWhere, IsNull, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
 import { Player } from '../players/entities/player.entity';
 import { Coach } from '../coaches/entities/coach.entity';
 import { Training } from '../events/entities/training.entity';
 import { Match } from '../events/entities/match.entity';
-import { Parent } from '../parents/entities/parent.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
+import { PlayersService } from '../players/players.service';
+import { ParentsService } from '../parents/parents.service';
+import { TrainingsService } from '../events/trainings.service';
+import { MatchesService } from '../events/matches.service';
+
 import { UserRole } from '../users/enums/user-role.enum';
-import { CreateEvaluationBatchDto, EvaluationRecordDto } from './dto/create-evaluation-batch.dto';
+import { CreateEvaluationBatchDto } from './dto/create-evaluation-batch.dto';
 import { EventType } from '../events/enums/event-type.enum';
+import { StatsPeriod } from '../common/enums/stats-period.enum';
+import { getDateRangeForPeriod } from '../common/utils/date-range.util';
 
 const DEFAULT_RATING = 5;
-
-export interface RatingHistoryPoint {
-  date: string;
-  eventType: EventType;
-  eventId: string;
-  averageRating: number;
-  ratings: {
-    technical: number | null;
-    tactical: number | null;
-    physical: number | null;
-    psychological: number | null;
-  };
-}
-
-export interface RatingStats {
-  averageRating: number | null;
-  totalEvents: number;
-  byCategory: {
-    technical: number | null;
-    tactical: number | null;
-    physical: number | null;
-    psychological: number | null;
-  };
-  history: RatingHistoryPoint[];
-}
 
 @Injectable()
 export class EvaluationsService {
@@ -52,16 +33,10 @@ export class EvaluationsService {
   constructor(
     @InjectRepository(Evaluation)
     private evaluationsRepository: Repository<Evaluation>,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
-    @InjectRepository(Coach)
-    private coachesRepository: Repository<Coach>,
-    @InjectRepository(Training)
-    private trainingsRepository: Repository<Training>,
-    @InjectRepository(Match)
-    private matchesRepository: Repository<Match>,
-    @InjectRepository(Parent)
-    private parentsRepository: Repository<Parent>,
+    private playersService: PlayersService,
+    private parentsService: ParentsService,
+    private trainingsService: TrainingsService,
+    private matchesService: MatchesService,
     private dataSource: DataSource,
   ) {}
 
@@ -73,7 +48,9 @@ export class EvaluationsService {
       throw new BadRequestException('Either trainingId or matchId is required');
     }
     if (dto.trainingId && dto.matchId) {
-      throw new BadRequestException('Cannot specify both trainingId and matchId');
+      throw new BadRequestException(
+        'Cannot specify both trainingId and matchId',
+      );
     }
 
     try {
@@ -86,7 +63,9 @@ export class EvaluationsService {
             where: { id: dto.trainingId },
           });
           if (!training) {
-            throw new NotFoundException(`Training with ID ${dto.trainingId} not found`);
+            throw new NotFoundException(
+              `Training with ID ${dto.trainingId} not found`,
+            );
           }
         }
 
@@ -95,7 +74,9 @@ export class EvaluationsService {
             where: { id: dto.matchId },
           });
           if (!match) {
-            throw new NotFoundException(`Match with ID ${dto.matchId} not found`);
+            throw new NotFoundException(
+              `Match with ID ${dto.matchId} not found`,
+            );
           }
         }
 
@@ -103,26 +84,104 @@ export class EvaluationsService {
           where: { user: { id: coachUserId } },
         });
         if (!coach) {
-          throw new BadRequestException('Only coaches can create evaluations. Admin users need a coach profile to evaluate players.');
+          throw new BadRequestException(
+            'Only coaches can create evaluations. Admin users need a coach profile to evaluate players.',
+          );
         }
 
-        const results: Evaluation[] = [];
+        const playerIds = dto.records.map((r) => r.playerId);
+
+        // Batch fetch all players
+        const players = await manager.find(Player, {
+          where: { id: In(playerIds) },
+        });
+        const playersMap = new Map(players.map((p) => [p.id, p]));
+
+        // Batch fetch all attendances for this event
+        const attendanceWhere: FindOptionsWhere<Attendance> = {
+          player: { id: In(playerIds) },
+        };
+        if (training) attendanceWhere.training = { id: training.id };
+        if (match) attendanceWhere.match = { id: match.id };
+
+        const attendances = await manager.find(Attendance, {
+          where: attendanceWhere,
+          relations: ['player'],
+        });
+        const attendanceMap = new Map(
+          attendances.map((a) => [a.player.id, a]),
+        );
+
+        // Batch fetch existing evaluations
+        const existingEvaluations = await manager.find(Evaluation, {
+          where: {
+            player: { id: In(playerIds) },
+            training: training ? { id: training.id } : IsNull(),
+            match: match ? { id: match.id } : IsNull(),
+          },
+          relations: ['player'],
+        });
+        const existingMap = new Map(
+          existingEvaluations.map((e) => [e.player.id, e]),
+        );
+
+        // Process records using maps
+        const evaluationsToSave: Evaluation[] = [];
 
         for (const record of dto.records) {
-          const evaluation = await this.upsertEvaluation(
-            manager,
-            record,
-            training,
-            match,
-            coach,
-          );
-          results.push(evaluation);
+          const player = playersMap.get(record.playerId);
+          if (!player) {
+            throw new NotFoundException(
+              `Player with ID ${record.playerId} not found`,
+            );
+          }
+
+          const attendance = attendanceMap.get(record.playerId);
+          if (!attendance || !attendance.isPresent) {
+            throw new BadRequestException(
+              `Cannot evaluate player ${player.firstName} ${player.lastName} - they did not play in this event`,
+            );
+          }
+
+          const existing = existingMap.get(record.playerId);
+
+          if (existing) {
+            if (record.technical !== undefined)
+              existing.technical = record.technical;
+            if (record.tactical !== undefined)
+              existing.tactical = record.tactical;
+            if (record.physical !== undefined)
+              existing.physical = record.physical;
+            if (record.psychological !== undefined)
+              existing.psychological = record.psychological;
+            if (record.comment !== undefined)
+              existing.comment = record.comment || null;
+            existing.coach = coach;
+            evaluationsToSave.push(existing);
+          } else {
+            const evaluation = manager.create(Evaluation, {
+              player,
+              training,
+              match,
+              coach,
+              technical: record.technical ?? DEFAULT_RATING,
+              tactical: record.tactical ?? DEFAULT_RATING,
+              physical: record.physical ?? DEFAULT_RATING,
+              psychological: record.psychological ?? DEFAULT_RATING,
+              comment: record.comment || null,
+            });
+            evaluationsToSave.push(evaluation);
+          }
         }
 
-        return results;
+        // Batch save all evaluations
+        return await manager.save(evaluationsToSave);
       });
     } catch (error) {
-      if (error instanceof NotFoundException || error instanceof BadRequestException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
       this.logger.error('Failed to create evaluations', error);
@@ -130,90 +189,8 @@ export class EvaluationsService {
     }
   }
 
-  private async upsertEvaluation(
-    manager: EntityManager,
-    record: EvaluationRecordDto,
-    training: Training | null,
-    match: Match | null,
-    coach: Coach,
-  ): Promise<Evaluation> {
-    const player = await manager.findOne(Player, {
-      where: { id: record.playerId },
-    });
-    if (!player) {
-      throw new NotFoundException(`Player with ID ${record.playerId} not found`);
-    }
-
-    const attendanceWhere: FindOptionsWhere<Attendance> = { player: { id: record.playerId } };
-    if (training) {
-      attendanceWhere.training = { id: training.id };
-    }
-    if (match) {
-      attendanceWhere.match = { id: match.id };
-    }
-
-    const attendance = await manager.findOne(Attendance, {
-      where: attendanceWhere,
-    });
-
-    if (!attendance || !attendance.isPresent) {
-      throw new BadRequestException(
-        `Cannot evaluate player ${player.firstName} ${player.lastName} - they did not play in this event`,
-      );
-    }
-
-    const whereCondition: FindOptionsWhere<Evaluation> = {
-      player: { id: record.playerId },
-      training: training ? { id: training.id } : IsNull(),
-      match: match ? { id: match.id } : IsNull(),
-    };
-
-    const existingEvaluation = await manager.findOne(Evaluation, {
-      where: whereCondition,
-      relations: ['player', 'training', 'match', 'coach'],
-    });
-
-    if (existingEvaluation) {
-      if (record.technical !== undefined) {
-        existingEvaluation.technical = record.technical;
-      }
-      if (record.tactical !== undefined) {
-        existingEvaluation.tactical = record.tactical;
-      }
-      if (record.physical !== undefined) {
-        existingEvaluation.physical = record.physical;
-      }
-      if (record.psychological !== undefined) {
-        existingEvaluation.psychological = record.psychological;
-      }
-      if (record.comment !== undefined) {
-        existingEvaluation.comment = record.comment || null;
-      }
-      existingEvaluation.coach = coach;
-      return await manager.save(existingEvaluation);
-    } else {
-      const evaluation = manager.create(Evaluation, {
-        player,
-        training,
-        match,
-        coach,
-        technical: record.technical ?? DEFAULT_RATING,
-        tactical: record.tactical ?? DEFAULT_RATING,
-        physical: record.physical ?? DEFAULT_RATING,
-        psychological: record.psychological ?? DEFAULT_RATING,
-        comment: record.comment || null,
-      });
-      return await manager.save(evaluation);
-    }
-  }
-
   async findByTraining(trainingId: string): Promise<Evaluation[]> {
-    const training = await this.trainingsRepository.findOne({
-      where: { id: trainingId },
-    });
-    if (!training) {
-      throw new NotFoundException(`Training with ID ${trainingId} not found`);
-    }
+    await this.trainingsService.findOne(trainingId);
 
     return await this.evaluationsRepository.find({
       where: { training: { id: trainingId } },
@@ -223,12 +200,7 @@ export class EvaluationsService {
   }
 
   async findByMatch(matchId: string): Promise<Evaluation[]> {
-    const match = await this.matchesRepository.findOne({
-      where: { id: matchId },
-    });
-    if (!match) {
-      throw new NotFoundException(`Match with ID ${matchId} not found`);
-    }
+    await this.matchesService.findOne(matchId);
 
     return await this.evaluationsRepository.find({
       where: { match: { id: matchId } },
@@ -245,25 +217,39 @@ export class EvaluationsService {
     });
   }
 
-  async getRatingStats(
-    playerId: string,
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<RatingStats> {
-    const player = await this.playersRepository.findOne({
-      where: { id: playerId },
-    });
-    if (!player) {
-      throw new NotFoundException(`Player with ID ${playerId} not found`);
+  async getRatingStats(playerId: string, period: StatsPeriod = StatsPeriod.ALL_TIME) {
+    await this.playersService.findOne(playerId);
+
+    const { start, end } = getDateRangeForPeriod(period);
+
+    const query = this.evaluationsRepository
+      .createQueryBuilder('e')
+      .leftJoinAndSelect('e.training', 't')
+      .leftJoinAndSelect('e.match', 'm')
+      .where('e.playerId = :playerId', { playerId })
+      .orderBy('e.createdAt', 'ASC');
+
+    if (start && end) {
+      query.andWhere(
+        '((t.startTime BETWEEN :start AND :end) OR (m.startTime BETWEEN :start AND :end))',
+        { start, end },
+      );
     }
 
-    const evaluations = await this.evaluationsRepository.find({
-      where: { player: { id: playerId } },
-      relations: ['training', 'match'],
-      order: { createdAt: 'ASC' },
-    });
+    const evaluations = await query.getMany();
 
-    const history: RatingHistoryPoint[] = [];
+    const history: {
+      date: string;
+      eventType: EventType;
+      eventId: string;
+      averageRating: number;
+      ratings: {
+        technical: number | null;
+        tactical: number | null;
+        physical: number | null;
+        psychological: number | null;
+      };
+    }[] = [];
     const categoryRatings: { [key: string]: number[] } = {
       technical: [],
       tactical: [],
@@ -289,9 +275,6 @@ export class EvaluationsService {
         continue;
       }
 
-      if (startDate && eventDate < startDate) continue;
-      if (endDate && eventDate > endDate) continue;
-
       const ratings = [
         evaluation.technical,
         evaluation.tactical,
@@ -299,16 +282,23 @@ export class EvaluationsService {
         evaluation.psychological,
       ].filter((r): r is number => r !== null);
 
-      const averageRating = ratings.length > 0
-        ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10
-        : 0;
+      const averageRating =
+        ratings.length > 0
+          ? Math.round(
+              (ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10,
+            ) / 10
+          : 0;
 
       allAverages.push(averageRating);
 
-      if (evaluation.technical !== null) categoryRatings.technical.push(evaluation.technical);
-      if (evaluation.tactical !== null) categoryRatings.tactical.push(evaluation.tactical);
-      if (evaluation.physical !== null) categoryRatings.physical.push(evaluation.physical);
-      if (evaluation.psychological !== null) categoryRatings.psychological.push(evaluation.psychological);
+      if (evaluation.technical !== null)
+        categoryRatings.technical.push(evaluation.technical);
+      if (evaluation.tactical !== null)
+        categoryRatings.tactical.push(evaluation.tactical);
+      if (evaluation.physical !== null)
+        categoryRatings.physical.push(evaluation.physical);
+      if (evaluation.psychological !== null)
+        categoryRatings.psychological.push(evaluation.psychological);
 
       history.push({
         date: eventDate.toISOString(),
@@ -343,94 +333,49 @@ export class EvaluationsService {
     };
   }
 
-  async findByTrainingForUser(
-    trainingId: string,
+  async findByEventForUser(
+    eventId: string,
+    eventType: EventType,
     userId: string,
     role: UserRole,
   ): Promise<Evaluation[]> {
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
-      return this.findByTraining(trainingId);
+      return eventType === EventType.TRAINING
+        ? this.findByTraining(eventId)
+        : this.findByMatch(eventId);
     }
 
-    const training = await this.trainingsRepository.findOne({
-      where: { id: trainingId },
-      relations: ['group'],
-    });
-    if (!training) {
-      throw new NotFoundException(`Training with ID ${trainingId} not found`);
-    }
+    const eventLabel = eventType === EventType.TRAINING ? 'Training' : 'Match';
+    const event =
+      eventType === EventType.TRAINING
+        ? await this.trainingsService.findOne(eventId)
+        : await this.matchesService.findOne(eventId);
 
-    const allEvaluations = await this.findByTraining(trainingId);
+    const allEvaluations =
+      eventType === EventType.TRAINING
+        ? await this.findByTraining(eventId)
+        : await this.findByMatch(eventId);
 
     if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['group'],
-      });
-      if (!player || player.group?.id !== training.group.id) {
-        throw new ForbiddenException('You do not have access to this training');
+      const player = await this.playersService.findByUserId(userId);
+      if (player.group?.id !== event.group.id) {
+        throw new ForbiddenException(
+          `You do not have access to this ${eventLabel.toLowerCase()}`,
+        );
       }
       return allEvaluations.filter((e) => e.player.id === player.id);
     }
 
     if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children', 'children.group'],
-      });
-      const childrenInGroup = parent?.children?.filter(
-        (child) => child.group?.id === training.group.id,
-      ) || [];
+      const parent = await this.parentsService.findByUserId(userId);
+      const childrenInGroup =
+        parent.children?.filter(
+          (child) => child.group?.id === event.group.id,
+        ) || [];
       if (childrenInGroup.length === 0) {
-        throw new ForbiddenException('You do not have access to this training');
-      }
-      const childIds = childrenInGroup.map((c) => c.id);
-      return allEvaluations.filter((e) => childIds.includes(e.player.id));
-    }
-
-    throw new ForbiddenException('Access denied');
-  }
-
-  async findByMatchForUser(
-    matchId: string,
-    userId: string,
-    role: UserRole,
-  ): Promise<Evaluation[]> {
-    if (role === UserRole.ADMIN || role === UserRole.COACH) {
-      return this.findByMatch(matchId);
-    }
-
-    const match = await this.matchesRepository.findOne({
-      where: { id: matchId },
-      relations: ['group'],
-    });
-    if (!match) {
-      throw new NotFoundException(`Match with ID ${matchId} not found`);
-    }
-
-    const allEvaluations = await this.findByMatch(matchId);
-
-    if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['group'],
-      });
-      if (!player || player.group?.id !== match.group.id) {
-        throw new ForbiddenException('You do not have access to this match');
-      }
-      return allEvaluations.filter((e) => e.player.id === player.id);
-    }
-
-    if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children', 'children.group'],
-      });
-      const childrenInGroup = parent?.children?.filter(
-        (child) => child.group?.id === match.group.id,
-      ) || [];
-      if (childrenInGroup.length === 0) {
-        throw new ForbiddenException('You do not have access to this match');
+        throw new ForbiddenException(
+          `You do not have access to this ${eventLabel.toLowerCase()}`,
+        );
       }
       const childIds = childrenInGroup.map((c) => c.id);
       return allEvaluations.filter((e) => childIds.includes(e.player.id));
@@ -449,23 +394,20 @@ export class EvaluationsService {
     }
 
     if (role === UserRole.PLAYER) {
-      const player = await this.playersRepository.findOne({
-        where: { user: { id: userId } },
-      });
-      if (!player || player.id !== playerId) {
+      const player = await this.playersService.findByUserId(userId);
+      if (player.id !== playerId) {
         throw new ForbiddenException('You can only view your own evaluations');
       }
       return this.findByPlayer(playerId);
     }
 
     if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children'],
-      });
-      const childIds = parent?.children?.map((c) => c.id) || [];
+      const parent = await this.parentsService.findByUserId(userId);
+      const childIds = parent.children?.map((c) => c.id) || [];
       if (!childIds.includes(playerId)) {
-        throw new ForbiddenException("You can only view your children's evaluations");
+        throw new ForbiddenException(
+          "You can only view your children's evaluations",
+        );
       }
       return this.findByPlayer(playerId);
     }
@@ -477,38 +419,27 @@ export class EvaluationsService {
     playerId: string,
     userId: string,
     role: UserRole,
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<RatingStats> {
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ) {
     if (role === UserRole.ADMIN || role === UserRole.COACH) {
-      return this.getRatingStats(playerId, startDate, endDate);
+      return this.getRatingStats(playerId, period);
     }
 
     if (role === UserRole.PARENT) {
-      const parent = await this.parentsRepository.findOne({
-        where: { user: { id: userId } },
-        relations: ['children'],
-      });
-      const childIds = parent?.children?.map((c) => c.id) || [];
+      const parent = await this.parentsService.findByUserId(userId);
+      const childIds = parent.children?.map((c) => c.id) || [];
       if (!childIds.includes(playerId)) {
-        throw new ForbiddenException("You can only view your children's rating stats");
+        throw new ForbiddenException(
+          "You can only view your children's rating stats",
+        );
       }
     }
 
-    return this.getRatingStats(playerId, startDate, endDate);
+    return this.getRatingStats(playerId, period);
   }
 
-  async getMyRatingStats(
-    userId: string,
-    startDate?: Date,
-    endDate?: Date,
-  ): Promise<RatingStats> {
-    const player = await this.playersRepository.findOne({
-      where: { user: { id: userId } },
-    });
-    if (!player) {
-      throw new NotFoundException('Player profile not found');
-    }
-    return this.getRatingStats(player.id, startDate, endDate);
+  async getMyRatingStats(userId: string, period: StatsPeriod = StatsPeriod.ALL_TIME) {
+    const player = await this.playersService.findByUserId(userId);
+    return this.getRatingStats(player.id, period);
   }
 }
