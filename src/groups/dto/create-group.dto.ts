@@ -1,14 +1,12 @@
-import { IsString, IsInt, IsOptional, IsUUID, IsArray, Min, Max } from 'class-validator';
-
-const currentYear = new Date().getFullYear();
+import { IsString, IsInt, IsOptional, IsUUID, IsArray } from 'class-validator';
+import { IsValidYearOfBirth } from '../../common/validators/is-valid-year-of-birth.validator';
 
 export class CreateGroupDto {
   @IsString()
   name: string;
 
   @IsInt()
-  @Min(currentYear - 25, { message: `Year of birth must be at least ${currentYear - 25}` })
-  @Max(currentYear - 3, { message: `Year of birth must be at most ${currentYear - 3}` })
+  @IsValidYearOfBirth({ minAge: 3, maxAge: 25 })
   yearOfBirth: number;
 
   @IsOptional()

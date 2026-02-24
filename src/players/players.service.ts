@@ -55,10 +55,6 @@ export class PlayersService {
     private dataSource: DataSource,
   ) {}
 
-  /**
-   * Syncs name fields between Player and User entities.
-   * Names are stored in both for query convenience, this ensures consistency.
-   */
   private syncPersonNames(
     player: Player,
     user: User,
@@ -84,6 +80,51 @@ export class PlayersService {
     }
 
     return player;
+  }
+
+  async findByIds(ids: string[]): Promise<Player[]> {
+    if (ids.length === 0) return [];
+
+    const players = await this.playersRepository.find({
+      where: { id: In(ids) },
+    });
+
+    if (players.length !== ids.length) {
+      const foundIds = new Set(players.map((p) => p.id));
+      const missingIds = ids.filter((id) => !foundIds.has(id));
+      throw new NotFoundException(
+        `Players with IDs ${missingIds.join(', ')} not found`,
+      );
+    }
+
+    return players;
+  }
+
+  async assignToGroup(playerIds: string[], groupId: string): Promise<void> {
+    if (playerIds.length === 0) return;
+
+    await this.findByIds(playerIds);
+    await this.playersRepository.update(
+      { id: In(playerIds) },
+      { group: { id: groupId } },
+    );
+  }
+
+  async removeFromGroup(playerIds: string[], groupId?: string): Promise<void> {
+    if (playerIds.length === 0 && !groupId) return;
+
+    const query = this.playersRepository.createQueryBuilder().update(Player);
+
+    if (playerIds.length > 0 && groupId) {
+      query
+        .set({ group: null })
+        .where('id IN (:...playerIds)', { playerIds })
+        .andWhere('groupId = :groupId', { groupId });
+    } else if (groupId) {
+      query.set({ group: null }).where('groupId = :groupId', { groupId });
+    }
+
+    await query.execute();
   }
 
   async findByUserId(userId: string): Promise<Player> {

@@ -1,55 +1,44 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, DataSource } from 'typeorm';
 import { Group } from './entities/group.entity';
-import { Coach } from '../coaches/entities/coach.entity';
 import { Player } from '../players/entities/player.entity';
+import { CoachesService } from '../coaches/coaches.service';
+import { PlayersService } from '../players/players.service';
 import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupStaffDto } from './dto/update-group-staff.dto';
 
 @Injectable()
 export class GroupsService {
+  private readonly logger = new Logger(GroupsService.name);
+
   constructor(
     @InjectRepository(Group)
     private groupsRepository: Repository<Group>,
-    @InjectRepository(Coach)
-    private coachesRepository: Repository<Coach>,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
+    private coachesService: CoachesService,
+    private playersService: PlayersService,
+    private dataSource: DataSource,
   ) {}
 
   async create(createGroupDto: CreateGroupDto): Promise<Group> {
     const group = this.groupsRepository.create(createGroupDto);
 
     if (createGroupDto.headCoachId) {
-      const headCoach = await this.coachesRepository.findOne({
-        where: { id: createGroupDto.headCoachId },
-      });
-      if (!headCoach) {
-        throw new NotFoundException(
-          `Coach with ID ${createGroupDto.headCoachId} not found`,
-        );
-      }
-      group.headCoach = headCoach;
+      group.headCoach = await this.coachesService.findOne(
+        createGroupDto.headCoachId,
+      );
     }
 
     if (createGroupDto.assistantIds && createGroupDto.assistantIds.length > 0) {
-      const assistants = await this.coachesRepository.find({
-        where: { id: In(createGroupDto.assistantIds) },
-      });
-
-      if (assistants.length !== createGroupDto.assistantIds.length) {
-        const foundIds = assistants.map((coach) => coach.id);
-        const missingIds = createGroupDto.assistantIds.filter(
-          (id) => !foundIds.includes(id),
-        );
-        throw new NotFoundException(
-          `Coaches with IDs ${missingIds.join(', ')} not found`,
-        );
-      }
-
-      group.assistants = assistants;
+      group.assistants = await this.coachesService.findByIds(
+        createGroupDto.assistantIds,
+      );
     }
 
     return await this.groupsRepository.save(group);
@@ -109,15 +98,9 @@ export class GroupsService {
       if (updateGroupStaffDto.headCoachId === null) {
         group.headCoach = null;
       } else {
-        const headCoach = await this.coachesRepository.findOne({
-          where: { id: updateGroupStaffDto.headCoachId },
-        });
-        if (!headCoach) {
-          throw new NotFoundException(
-            `Coach with ID ${updateGroupStaffDto.headCoachId} not found`,
-          );
-        }
-        group.headCoach = headCoach;
+        group.headCoach = await this.coachesService.findOne(
+          updateGroupStaffDto.headCoachId,
+        );
       }
     }
 
@@ -125,21 +108,9 @@ export class GroupsService {
       if (updateGroupStaffDto.assistantIds.length === 0) {
         group.assistants = [];
       } else {
-        const assistants = await this.coachesRepository.find({
-          where: { id: In(updateGroupStaffDto.assistantIds) },
-        });
-
-        if (assistants.length !== updateGroupStaffDto.assistantIds.length) {
-          const foundIds = assistants.map((coach) => coach.id);
-          const missingIds = updateGroupStaffDto.assistantIds.filter(
-            (id) => !foundIds.includes(id),
-          );
-          throw new NotFoundException(
-            `Coaches with IDs ${missingIds.join(', ')} not found`,
-          );
-        }
-
-        group.assistants = assistants;
+        group.assistants = await this.coachesService.findByIds(
+          updateGroupStaffDto.assistantIds,
+        );
       }
     }
 
@@ -147,69 +118,42 @@ export class GroupsService {
   }
 
   async addPlayers(groupId: string, playerIds: string[]): Promise<Group> {
-    const group = await this.groupsRepository.findOne({
-      where: { id: groupId },
-    });
-    if (!group) {
-      throw new NotFoundException(`Group with ID ${groupId} not found`);
-    }
-
-    const players = await this.playersRepository.find({
-      where: { id: In(playerIds) },
-    });
-
-    if (players.length !== playerIds.length) {
-      const foundIds = players.map((player) => player.id);
-      const missingIds = playerIds.filter((id) => !foundIds.includes(id));
-      throw new NotFoundException(
-        `Players with IDs ${missingIds.join(', ')} not found`,
-      );
-    }
-
-    await this.playersRepository.update(
-      { id: In(playerIds) },
-      { group: { id: groupId } },
-    );
-
-    const updatedGroup = await this.groupsRepository.findOne({
-      where: { id: groupId },
-      relations: ['headCoach', 'assistants', 'players'],
-    });
-
-    if (!updatedGroup) {
-      throw new NotFoundException(
-        `Group with ID ${groupId} not found after update`,
-      );
-    }
-
-    return updatedGroup;
+    await this.findOne(groupId);
+    await this.playersService.assignToGroup(playerIds, groupId);
+    return await this.findOne(groupId);
   }
 
   async removePlayers(groupId: string, playerIds: string[]): Promise<Group> {
-    const group = await this.findOne(groupId);
-
-    await this.playersRepository
-      .createQueryBuilder()
-      .update(Player)
-      .set({ group: null as unknown as Group })
-      .where('id IN (:...playerIds)', { playerIds })
-      .andWhere('groupId = :groupId', { groupId })
-      .execute();
-
+    await this.findOne(groupId);
+    await this.playersService.removeFromGroup(playerIds, groupId);
     return await this.findOne(groupId);
   }
 
   async remove(id: string): Promise<void> {
-    await this.playersRepository
-      .createQueryBuilder()
-      .update(Player)
-      .set({ group: null as unknown as Group })
-      .where('groupId = :groupId', { groupId: id })
-      .execute();
+    try {
+      await this.dataSource.transaction(async (manager) => {
+        const group = await manager.findOne(Group, {
+          where: { id },
+          lock: { mode: 'pessimistic_write' },
+        });
 
-    const result = await this.groupsRepository.delete(id);
-    if (result.affected === 0) {
-      throw new NotFoundException(`Group with ID ${id} not found`);
+        if (!group) {
+          return;
+        }
+
+        await manager
+          .createQueryBuilder()
+          .update(Player)
+          .set({ group: null })
+          .where('groupId = :groupId', { groupId: id })
+          .execute();
+
+        await manager.remove(group);
+      });
+    } catch (error) {
+      if (error instanceof NotFoundException) throw error;
+      this.logger.error(`Failed to delete group ${id}`, error);
+      throw new InternalServerErrorException('Failed to delete group');
     }
   }
 }

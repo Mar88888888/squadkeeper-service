@@ -6,7 +6,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository, In } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { Coach } from './entities/coach.entity';
 import { User } from '../users/entities/user.entity';
@@ -61,6 +61,25 @@ export class CoachesService {
     }
 
     return coach;
+  }
+
+  async findByIds(ids: string[]): Promise<Coach[]> {
+    if (ids.length === 0) return [];
+
+    const coaches = await this.coachesRepository.find({
+      where: { id: In(ids) },
+      relations: ['user'],
+    });
+
+    if (coaches.length !== ids.length) {
+      const foundIds = new Set(coaches.map((c) => c.id));
+      const missingIds = ids.filter((id) => !foundIds.has(id));
+      throw new NotFoundException(
+        `Coaches with IDs ${missingIds.join(', ')} not found`,
+      );
+    }
+
+    return coaches;
   }
 
   async remove(id: string): Promise<void> {

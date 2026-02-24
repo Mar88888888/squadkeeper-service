@@ -35,10 +35,10 @@ export class Player extends PersonEntity {
 
   @ManyToOne(() => Parent, (parent) => parent.children, { nullable: true })
   @JoinColumn({ name: 'parentId' })
-  parent: Parent;
+  parent: Parent | null;
 
-  @ManyToOne(() => Group, (group) => group.players)
-  group: Group;
+  @ManyToOne(() => Group, (group) => group.players, { nullable: true })
+  group: Group | null;
 
   @OneToMany(() => Evaluation, (evaluation) => evaluation.player)
   evaluations: Evaluation[];

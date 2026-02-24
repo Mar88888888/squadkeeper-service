@@ -16,15 +16,18 @@ import { CreateGroupDto } from './dto/create-group.dto';
 import { UpdateGroupDto } from './dto/update-group.dto';
 import { UpdateGroupStaffDto } from './dto/update-group-staff.dto';
 import { AssignPlayersDto } from './dto/assign-players.dto';
+import { GroupResponseDto } from './dto/group-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('groups')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Serialize(GroupResponseDto)
 export class GroupsController {
   constructor(private readonly groupsService: GroupsService) {}
 
