@@ -16,7 +16,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
-import { CurrentUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('attendance')
 export class AttendanceController {

@@ -11,14 +11,14 @@ import {
   ChildrenStatsResponse,
   ChildInfo,
 } from './dto/player-stats.dto';
-import { AttendanceStats } from '../common/interfaces/attendance-stats.interface';
+import { AttendanceStats } from '../attendance/interfaces/attendance-stats.interface';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { Position, DEFENSIVE_POSITIONS } from './enums/position.enum';
 import {
   getDateRangeForPeriod,
   DateRange,
 } from '../common/utils/date-range.util';
-import { calculateAttendanceRate } from '../common/utils/attendance.util';
+import { calculateAttendanceRate } from '../attendance/utils/attendance-rate.util';
 
 @Injectable()
 export class PlayerStatsService {

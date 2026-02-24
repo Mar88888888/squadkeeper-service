@@ -1,6 +1,6 @@
 import { IsOptional, IsDateString, IsEnum, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { TimeFilter } from '../../common/enums/time-filter.enum';
+import { TimeFilter } from '../enums/time-filter.enum';
 
 export class FilterTrainingsDto {
   @IsOptional()

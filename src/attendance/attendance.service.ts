@@ -17,8 +17,8 @@ import { EventType } from '../events/enums/event-type.enum';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ChildInfo } from '../auth/dto/authenticated-user.dto';
-import { calculateAttendanceRate } from '../common/utils/attendance.util';
-import { AttendanceStats } from '../common/interfaces/attendance-stats.interface';
+import { calculateAttendanceRate } from './utils/attendance-rate.util';
+import { AttendanceStats } from './interfaces/attendance-stats.interface';
 
 export interface PlayerAttendanceStats extends AttendanceStats {
   playerId: string;

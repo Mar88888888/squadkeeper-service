@@ -9,7 +9,9 @@ import {
 export class IsFutureDateConstraint implements ValidatorConstraintInterface {
   validate(value: unknown): boolean {
     if (!value) return true;
-    const date = new Date(value as string);
+    if (typeof value !== 'string') return false;
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return false;
     return date.getTime() > Date.now();
   }
 

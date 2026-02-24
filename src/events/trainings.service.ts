@@ -7,7 +7,7 @@ import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { UserRole } from '../users/enums/user-role.enum';
-import { buildDateFilter } from '../common/utils/date-filter.util';
+import { buildDateFilter } from './utils/date-filter.util';
 
 @Injectable()
 export class TrainingsService {

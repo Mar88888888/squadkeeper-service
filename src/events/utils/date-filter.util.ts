@@ -11,6 +11,23 @@ interface StartTimeFilter {
   startTime: FindOperator<Date>;
 }
 
+function parseDate(dateString: string): Date | null {
+  const date = new Date(dateString);
+  return isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
 export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | undefined {
   const { timeFilter, dateFrom, dateTo } = filters;
 
@@ -26,7 +43,8 @@ export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | u
 
       case TimeFilter.THIS_WEEK: {
         const startOfWeek = new Date(now);
-        startOfWeek.setDate(now.getDate() - now.getDay() + 1);
+        const dayOfWeek = now.getDay();
+        startOfWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
         startOfWeek.setHours(0, 0, 0, 0);
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -36,7 +54,8 @@ export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | u
 
       case TimeFilter.NEXT_WEEK: {
         const startOfNextWeek = new Date(now);
-        startOfNextWeek.setDate(now.getDate() - now.getDay() + 8);
+        const dayOfWeek = now.getDay();
+        startOfNextWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? 1 : 8));
         startOfNextWeek.setHours(0, 0, 0, 0);
         const endOfNextWeek = new Date(startOfNextWeek);
         endOfNextWeek.setDate(startOfNextWeek.getDate() + 6);
@@ -61,20 +80,23 @@ export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | u
   }
 
   if (dateFrom && dateTo) {
-    return {
-      startTime: Between(
-        new Date(dateFrom),
-        new Date(dateTo + 'T23:59:59.999Z'),
-      ),
-    };
+    const from = parseDate(dateFrom);
+    const to = parseDate(dateTo);
+    if (from && to) {
+      return { startTime: Between(startOfDay(from), endOfDay(to)) };
+    }
   }
   if (dateFrom) {
-    return { startTime: MoreThanOrEqual(new Date(dateFrom)) };
+    const from = parseDate(dateFrom);
+    if (from) {
+      return { startTime: MoreThanOrEqual(startOfDay(from)) };
+    }
   }
   if (dateTo) {
-    return {
-      startTime: LessThanOrEqual(new Date(dateTo + 'T23:59:59.999Z')),
-    };
+    const to = parseDate(dateTo);
+    if (to) {
+      return { startTime: LessThanOrEqual(endOfDay(to)) };
+    }
   }
 
   return undefined;

@@ -1,6 +1,6 @@
 import { IsDate, IsString, IsOptional, IsUUID, IsInt, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IsFutureDate } from '../../common/validators/is-future-date.validator';
+import { IsFutureDate } from '../validators/is-future-date.validator';
 
 export class CreateTrainingDto {
   @IsUUID()

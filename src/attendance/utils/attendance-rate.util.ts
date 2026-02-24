@@ -1,11 +1,4 @@
-/**
- * Interface for attendance statistics used in rate calculation
- */
-export interface AttendanceStatsForRate {
-  total: number;
-  present: number;
-  rate: number;
-}
+import { AttendanceStatsForRate } from '../interfaces/attendance-stats.interface';
 
 /**
  * Calculates the attendance rate based on attendance statistics.

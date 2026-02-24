@@ -1,6 +1,6 @@
 import { Position } from '../enums/position.enum';
 import { StatsPeriod } from '../../common/enums/stats-period.enum';
-import { AttendanceStats } from '../../common/interfaces/attendance-stats.interface';
+import { AttendanceStats } from '../../attendance/interfaces/attendance-stats.interface';
 
 export interface PlayerStatsResponse {
   playerId: string;

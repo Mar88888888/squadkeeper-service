@@ -1,5 +1,5 @@
 import { IsOptional, IsDateString, IsEnum } from 'class-validator';
-import { TimeFilter } from '../../common/enums/time-filter.enum';
+import { TimeFilter } from '../enums/time-filter.enum';
 
 export class FilterMatchesDto {
   @IsOptional()

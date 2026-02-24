@@ -1,5 +1,5 @@
 import { IsString, IsInt, IsOptional, IsUUID, IsArray } from 'class-validator';
-import { IsValidYearOfBirth } from '../../common/validators/is-valid-year-of-birth.validator';
+import { IsValidYearOfBirth } from '../validators/is-valid-year-of-birth.validator';
 
 export class CreateGroupDto {
   @IsString()

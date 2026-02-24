@@ -7,8 +7,8 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
-import * as bcrypt from 'bcrypt';
 import { Parent } from './entities/parent.entity';
+import { hashPassword } from '../auth/utils/password.util';
 import { User } from '../users/entities/user.entity';
 import { Player } from '../players/entities/player.entity';
 import { UserRole } from '../users/enums/user-role.enum';
@@ -146,7 +146,7 @@ export class ParentsService {
           throw new ConflictException('Email already exists');
         }
 
-        const hashedPassword = await bcrypt.hash(createParentDto.password, 10);
+        const hashedPassword = await hashPassword(createParentDto.password);
 
         const user = manager.create(User, {
           email: createParentDto.email,
@@ -228,7 +228,7 @@ export class ParentsService {
           }
 
           if (password !== undefined) {
-            parent.user.passwordHash = await bcrypt.hash(password, 10);
+            parent.user.passwordHash = await hashPassword(password);
           }
         }
 

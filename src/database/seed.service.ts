@@ -2,8 +2,9 @@ import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import * as bcrypt from 'bcrypt';
+import { PostgresError } from 'pg-error-enum';
 import { User } from '../users/entities/user.entity';
+import { hashPassword } from '../auth/utils/password.util';
 import { UserRole } from '../users/enums/user-role.enum';
 
 @Injectable()
@@ -40,7 +41,7 @@ export class SeedService implements OnApplicationBootstrap {
     }
 
     try {
-      const hashedPassword = await bcrypt.hash(adminPassword, 10);
+      const hashedPassword = await hashPassword(adminPassword);
 
       const adminUser = this.userRepository.create({
         email: adminEmail,
@@ -53,7 +54,7 @@ export class SeedService implements OnApplicationBootstrap {
       await this.userRepository.save(adminUser);
       this.logger.log(`Admin user created: ${adminEmail}`);
     } catch (error) {
-      if (error.code === '23505') {
+      if (error.code === PostgresError.UNIQUE_VIOLATION) {
         return;
       }
       throw error;

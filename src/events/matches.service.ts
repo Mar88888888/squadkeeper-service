@@ -13,7 +13,7 @@ import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto } from './dto/filter-matches.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MatchType } from './enums/match-type.enum';
-import { buildDateFilter } from '../common/utils/date-filter.util';
+import { buildDateFilter } from './utils/date-filter.util';
 
 @Injectable()
 export class MatchesService {
