@@ -13,6 +13,7 @@ import { User } from '../users/entities/user.entity';
 import { Goal } from '../events/entities/goal.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { Group } from '../groups/entities/group.entity';
+import { Parent } from '../parents/entities/parent.entity';
 import { UserRole } from '../users/enums/user-role.enum';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
@@ -125,6 +126,32 @@ export class PlayersService {
     }
 
     await query.execute();
+  }
+
+  async findOneWithParent(playerId: string): Promise<Player> {
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId },
+      relations: ['parent'],
+    });
+
+    if (!player) {
+      throw new NotFoundException(`Player with id ${playerId} not found`);
+    }
+
+    return player;
+  }
+
+  async setParent(playerId: string, parent: Parent | null): Promise<void> {
+    const player = await this.playersRepository.findOne({
+      where: { id: playerId },
+    });
+
+    if (!player) {
+      throw new NotFoundException(`Player with id ${playerId} not found`);
+    }
+
+    player.parent = parent;
+    await this.playersRepository.save(player);
   }
 
   async findByUserId(userId: string): Promise<Player> {

@@ -14,14 +14,17 @@ import {
 import { ParentsService } from './parents.service';
 import { CreateParentDto } from './dto/create-parent.dto';
 import { UpdateParentDto } from './dto/update-parent.dto';
+import { ParentResponseDto } from './dto/parent-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('parents')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.ADMIN)
+@Serialize(ParentResponseDto)
 export class ParentsController {
   constructor(private readonly parentsService: ParentsService) {}
 

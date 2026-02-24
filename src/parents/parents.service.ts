@@ -12,6 +12,7 @@ import { Parent } from './entities/parent.entity';
 import { User } from '../users/entities/user.entity';
 import { Player } from '../players/entities/player.entity';
 import { UserRole } from '../users/enums/user-role.enum';
+import { PlayersService } from '../players/players.service';
 import { CreateParentDto } from './dto/create-parent.dto';
 import { UpdateParentDto } from './dto/update-parent.dto';
 
@@ -22,15 +23,10 @@ export class ParentsService {
   constructor(
     @InjectRepository(Parent)
     private parentsRepository: Repository<Parent>,
-    @InjectRepository(Player)
-    private playersRepository: Repository<Player>,
+    private playersService: PlayersService,
     private dataSource: DataSource,
   ) {}
 
-  /**
-   * Syncs name fields between Parent and User entities.
-   * Names are stored in both for query convenience, this ensures consistency.
-   */
   private syncPersonNames(
     parent: Parent,
     user: User,
@@ -61,6 +57,19 @@ export class ParentsService {
 
     if (!parent) {
       throw new NotFoundException('Parent profile not found');
+    }
+
+    return parent;
+  }
+
+  async findOne(id: string): Promise<Parent> {
+    const parent = await this.parentsRepository.findOne({
+      where: { id },
+      relations: ['user', 'children'],
+    });
+
+    if (!parent) {
+      throw new NotFoundException(`Parent with ID ${id} not found`);
     }
 
     return parent;
@@ -101,63 +110,29 @@ export class ParentsService {
   }
 
   async linkChild(parentId: string, playerId: string): Promise<Parent> {
-    const parent = await this.parentsRepository.findOne({
-      where: { id: parentId },
-      relations: ['children'],
-    });
-
-    if (!parent) {
-      throw new NotFoundException('Parent not found');
-    }
-
-    const player = await this.playersRepository.findOne({
-      where: { id: playerId },
-      relations: ['parent'],
-    });
-
-    if (!player) {
-      throw new NotFoundException('Player not found');
-    }
+    const parent = await this.findOne(parentId);
+    const player = await this.playersService.findOneWithParent(playerId);
 
     if (player.parent?.id === parentId) {
       throw new BadRequestException('Player is already linked to this parent');
     }
 
-    player.parent = parent;
-    await this.playersRepository.save(player);
+    await this.playersService.setParent(playerId, parent);
 
-    return this.parentsRepository.findOne({
-      where: { id: parentId },
-      relations: ['user', 'children'],
-    }) as Promise<Parent>;
+    return this.findOne(parentId);
   }
 
   async unlinkChild(parentId: string, playerId: string): Promise<Parent> {
-    const parent = await this.parentsRepository.findOne({
-      where: { id: parentId },
-    });
+    await this.findOne(parentId);
+    const player = await this.playersService.findOneWithParent(playerId);
 
-    if (!parent) {
-      throw new NotFoundException('Parent not found');
+    if (player.parent?.id !== parentId) {
+      throw new NotFoundException('Player not linked to this parent');
     }
 
-    const player = await this.playersRepository.findOne({
-      where: { id: playerId, parent: { id: parentId } },
-    });
+    await this.playersService.setParent(playerId, null);
 
-    if (!player) {
-      throw new NotFoundException(
-        'Player not found or not linked to this parent',
-      );
-    }
-
-    player.parent = null as unknown as Parent;
-    await this.playersRepository.save(player);
-
-    return this.parentsRepository.findOne({
-      where: { id: parentId },
-      relations: ['user', 'children'],
-    }) as Promise<Parent>;
+    return this.findOne(parentId);
   }
 
   async create(createParentDto: CreateParentDto): Promise<Parent> {
@@ -243,7 +218,9 @@ export class ParentsService {
 
         if (parent.user) {
           if (email !== undefined && email !== parent.user.email) {
-            const existingUser = await manager.findOne(User, { where: { email } });
+            const existingUser = await manager.findOne(User, {
+              where: { email },
+            });
             if (existingUser) {
               throw new ConflictException('Email already exists');
             }
@@ -257,7 +234,8 @@ export class ParentsService {
 
         this.syncPersonNames(parent, parent.user, { firstName, lastName });
 
-        if (updateParentDto.phoneNumber !== undefined) parent.phoneNumber = updateParentDto.phoneNumber;
+        if (updateParentDto.phoneNumber !== undefined)
+          parent.phoneNumber = updateParentDto.phoneNumber;
 
         await manager.save([parent.user, parent]);
 
