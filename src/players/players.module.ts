@@ -6,6 +6,7 @@ import { Goal } from '../events/entities/goal.entity';
 import { Attendance } from '../attendance/entities/attendance.entity';
 import { Group } from '../groups/entities/group.entity';
 import { PlayersService } from './players.service';
+import { PlayerStatsService } from './player-stats.service';
 import { PlayersController } from './players.controller';
 import { UsersModule } from '../users/users.module';
 
@@ -15,7 +16,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [PlayersController],
-  providers: [PlayersService],
+  providers: [PlayersService, PlayerStatsService],
   exports: [TypeOrmModule, PlayersService],
 })
 export class PlayersModule {}

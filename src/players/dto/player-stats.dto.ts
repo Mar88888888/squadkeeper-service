@@ -1,14 +1,6 @@
 import { Position } from '../enums/position.enum';
 import { StatsPeriod } from '../../common/enums/stats-period.enum';
-
-export interface AttendanceBreakdown {
-  total: number;
-  present: number;
-  absent: number;
-  rate: number;
-  totalTrainings: number;
-  totalMatches: number;
-}
+import { AttendanceStats } from '../../common/interfaces/attendance-stats.interface';
 
 export interface PlayerStatsResponse {
   playerId: string;
@@ -18,7 +10,7 @@ export interface PlayerStatsResponse {
   goals: number;
   assists: number;
   cleanSheets: number;
-  attendance: AttendanceBreakdown;
+  attendance: AttendanceStats;
   period: StatsPeriod;
 }
 

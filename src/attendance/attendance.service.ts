@@ -15,20 +15,10 @@ import { Evaluation } from '../evaluations/entities/evaluation.entity';
 import { MarkAttendanceBatchDto } from './dto/mark-attendance-batch.dto';
 import { EventType } from '../events/enums/event-type.enum';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
-import { TrainingsService } from '../events/trainings.service';
-import { MatchesService } from '../events/matches.service';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ChildInfo } from '../auth/dto/authenticated-user.dto';
 import { calculateAttendanceRate } from '../common/utils/attendance.util';
-
-export interface AttendanceStats {
-  total: number;
-  present: number;
-  absent: number;
-  rate: number;
-  totalTrainings: number;
-  totalMatches: number;
-}
+import { AttendanceStats } from '../common/interfaces/attendance-stats.interface';
 
 export interface PlayerAttendanceStats extends AttendanceStats {
   playerId: string;
@@ -42,9 +32,11 @@ export class AttendanceService {
   constructor(
     @InjectRepository(Attendance)
     private attendanceRepository: Repository<Attendance>,
+    @InjectRepository(Training)
+    private trainingsRepository: Repository<Training>,
+    @InjectRepository(Match)
+    private matchesRepository: Repository<Match>,
     private dataSource: DataSource,
-    private readonly trainingsService: TrainingsService,
-    private readonly matchesService: MatchesService,
   ) {}
 
   async markBatch(dto: MarkAttendanceBatchDto): Promise<Attendance[]> {
@@ -299,19 +291,23 @@ export class AttendanceService {
     eventId: string,
     eventType: EventType,
   ): Promise<Training | Match> {
-    try {
-      if (eventType === EventType.TRAINING) {
-        return await this.trainingsService.findOne(eventId);
-      } else {
-        return await this.matchesService.findOne(eventId);
-      }
-    } catch (error) {
-      if (error instanceof NotFoundException) {
-        throw new NotFoundException(
-          `${eventType === EventType.TRAINING ? 'Training' : 'Match'} not found`,
-        );
-      }
-      throw error;
+    const event =
+      eventType === EventType.TRAINING
+        ? await this.trainingsRepository.findOne({
+            where: { id: eventId },
+            relations: ['group'],
+          })
+        : await this.matchesRepository.findOne({
+            where: { id: eventId },
+            relations: ['group'],
+          });
+
+    if (!event) {
+      throw new NotFoundException(
+        `${eventType === EventType.TRAINING ? 'Training' : 'Match'} not found`,
+      );
     }
+
+    return event;
   }
 }
