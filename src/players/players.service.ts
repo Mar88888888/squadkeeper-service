@@ -164,7 +164,7 @@ export class PlayersService {
       });
     } catch (error) {
       this.logger.error('Failed to delete player', error);
-      throw new BadRequestException('Failed to delete player');
+      throw new BadRequestException(`Failed to delete player: ${error.message}`);
     }
   }
 
@@ -212,7 +212,7 @@ export class PlayersService {
         throw error;
       }
       this.logger.error('Failed to create player', error);
-      throw new BadRequestException('Failed to create player');
+      throw new BadRequestException(`Failed to create player: ${error.message}`);
     }
   }
 
@@ -270,7 +270,7 @@ export class PlayersService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update player', error);
-      throw new BadRequestException('Failed to update player');
+      throw new BadRequestException(`Failed to update player: ${error.message}`);
     }
   }
 }

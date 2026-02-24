@@ -153,7 +153,7 @@ export class GroupsService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       this.logger.error(`Failed to delete group ${id}`, error);
-      throw new InternalServerErrorException('Failed to delete group');
+      throw new InternalServerErrorException(`Failed to delete group: ${error.message}`);
     }
   }
 }

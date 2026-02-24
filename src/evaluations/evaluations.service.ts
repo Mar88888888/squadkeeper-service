@@ -185,7 +185,7 @@ export class EvaluationsService {
         throw error;
       }
       this.logger.error('Failed to create evaluations', error);
-      throw new BadRequestException('Failed to create evaluations');
+      throw new BadRequestException(`Failed to create evaluations: ${error.message}`);
     }
   }
 

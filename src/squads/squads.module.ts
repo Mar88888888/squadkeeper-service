@@ -7,12 +7,14 @@ import { SquadPosition } from './entities/squad-position.entity';
 import { Player } from '../players/entities/player.entity';
 import { GroupsModule } from '../groups/groups.module';
 import { CoachesModule } from '../coaches/coaches.module';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([Squad, SquadPosition, Player]),
     GroupsModule,
     CoachesModule,
+    AuthModule,
   ],
   controllers: [SquadsController],
   providers: [SquadsService],

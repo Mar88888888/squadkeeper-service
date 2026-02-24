@@ -2,6 +2,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
@@ -10,6 +11,7 @@ import { SquadPosition } from './entities/squad-position.entity';
 import { Player } from '../players/entities/player.entity';
 import { GroupsService } from '../groups/groups.service';
 import { CoachesService } from '../coaches/coaches.service';
+import { PermissionsService } from '../auth/permissions.service';
 import { CreateSquadDto } from './dto/create-squad.dto';
 import { UpdateSquadDto } from './dto/update-squad.dto';
 import { UpdatePositionsDto } from './dto/update-positions.dto';
@@ -18,6 +20,8 @@ import { Position } from '../players/enums/position.enum';
 
 @Injectable()
 export class SquadsService {
+  private readonly logger = new Logger(SquadsService.name);
+
   constructor(
     @InjectRepository(Squad)
     private squadsRepository: Repository<Squad>,
@@ -27,6 +31,7 @@ export class SquadsService {
     private playersRepository: Repository<Player>,
     private groupsService: GroupsService,
     private coachesService: CoachesService,
+    private permissionsService: PermissionsService,
   ) {}
 
   async create(
@@ -35,7 +40,7 @@ export class SquadsService {
   ): Promise<Squad> {
     const group = await this.groupsService.findOne(createSquadDto.groupId);
 
-    if (!user.groupIds?.includes(createSquadDto.groupId)) {
+    if (!this.permissionsService.checkGroupAccess(user, createSquadDto.groupId)) {
       throw new ForbiddenException('You do not have access to this group');
     }
 
@@ -60,6 +65,7 @@ export class SquadsService {
       savedSquad.positions = positions;
     }
 
+    this.logger.log(`Squad created: ${savedSquad.id} for group ${group.id}`);
     return savedSquad;
   }
 
@@ -97,7 +103,7 @@ export class SquadsService {
   ): Promise<Squad> {
     const squad = await this.findOne(id);
 
-    if (!user.groupIds?.includes(squad.group.id)) {
+    if (!this.permissionsService.checkGroupAccess(user, squad.group.id)) {
       throw new ForbiddenException('You do not have access to this squad');
     }
 
@@ -109,7 +115,9 @@ export class SquadsService {
       squad.gameFormat = updateSquadDto.gameFormat;
     }
 
-    return await this.squadsRepository.save(squad);
+    const saved = await this.squadsRepository.save(squad);
+    this.logger.log(`Squad updated: ${id}`);
+    return saved;
   }
 
   async updatePositions(
@@ -119,7 +127,7 @@ export class SquadsService {
   ): Promise<Squad> {
     const squad = await this.findOne(id);
 
-    if (!user.groupIds?.includes(squad.group.id)) {
+    if (!this.permissionsService.checkGroupAccess(user, squad.group.id)) {
       throw new ForbiddenException('You do not have access to this squad');
     }
 
@@ -131,6 +139,7 @@ export class SquadsService {
     );
     squad.positions = positions;
 
+    this.logger.log(`Squad positions updated: ${id}`);
     return squad;
   }
 
@@ -141,7 +150,7 @@ export class SquadsService {
   ): Promise<Squad> {
     const original = await this.findOne(id);
 
-    if (!user.groupIds?.includes(original.group.id)) {
+    if (!this.permissionsService.checkGroupAccess(user, original.group.id)) {
       throw new ForbiddenException('You do not have access to this squad');
     }
 
@@ -165,17 +174,19 @@ export class SquadsService {
       savedSquad.positions = positions;
     }
 
+    this.logger.log(`Squad duplicated: ${id} -> ${savedSquad.id}`);
     return savedSquad;
   }
 
   async remove(id: string, user: AuthenticatedUser): Promise<void> {
     const squad = await this.findOne(id);
 
-    if (!user.groupIds?.includes(squad.group.id)) {
+    if (!this.permissionsService.checkGroupAccess(user, squad.group.id)) {
       throw new ForbiddenException('You do not have access to this squad');
     }
 
     await this.squadsRepository.remove(squad);
+    this.logger.log(`Squad deleted: ${id}`);
   }
 
   private async createPositions(

@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { MatchesService } from './matches.service';
 import { GoalsService } from './goals.service';
@@ -42,10 +43,7 @@ export class MatchesController {
     @Body() createMatchDto: CreateMatchDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (
-      user.role !== UserRole.ADMIN &&
-      !user.groupIds?.includes(createMatchDto.groupId)
-    ) {
+    if (!this.permissionsService.checkGroupAccess(user, createMatchDto.groupId)) {
       throw new ForbiddenException(
         'You can only create matches for your own groups',
       );
@@ -70,14 +68,14 @@ export class MatchesController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  findOne(@Param('id') id: string) {
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.matchesService.findOne(id);
   }
 
   @Patch(':id/score')
   @Roles(UserRole.COACH, UserRole.ADMIN)
   async updateResult(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMatchResultDto: UpdateMatchResultDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -96,7 +94,7 @@ export class MatchesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   async remove(
-    @Param('id') id: string,
+    @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const match = await this.matchesService.findOne(id);
@@ -112,7 +110,7 @@ export class MatchesController {
 
   @Get(':id/goals')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  getGoals(@Param('id') matchId: string) {
+  getGoals(@Param('id', ParseUUIDPipe) matchId: string) {
     return this.goalsService.getGoals(matchId);
   }
 
@@ -120,7 +118,7 @@ export class MatchesController {
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   async addGoal(
-    @Param('id') matchId: string,
+    @Param('id', ParseUUIDPipe) matchId: string,
     @Body() addGoalDto: AddGoalDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
@@ -139,8 +137,8 @@ export class MatchesController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @Roles(UserRole.COACH, UserRole.ADMIN)
   async removeGoal(
-    @Param('id') matchId: string,
-    @Param('goalId') goalId: string,
+    @Param('id', ParseUUIDPipe) matchId: string,
+    @Param('goalId', ParseUUIDPipe) goalId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
     const match = await this.matchesService.findOne(matchId);

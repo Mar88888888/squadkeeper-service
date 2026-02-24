@@ -40,10 +40,7 @@ export class TrainingsController {
     @Body() createTrainingDto: CreateTrainingDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (
-      user.role !== UserRole.ADMIN &&
-      !user.groupIds?.includes(createTrainingDto.groupId)
-    ) {
+    if (!this.permissionsService.checkGroupAccess(user, createTrainingDto.groupId)) {
       throw new ForbiddenException(
         'You can only create trainings for your own groups',
       );
@@ -76,7 +73,7 @@ export class TrainingsController {
     @Param('groupId', ParseUUIDPipe) groupId: string,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (user.role !== UserRole.ADMIN && !user.groupIds?.includes(groupId)) {
+    if (!this.permissionsService.checkGroupAccess(user, groupId)) {
       throw new ForbiddenException(
         'You can only view trainings for your own groups',
       );
@@ -117,8 +114,7 @@ export class TrainingsController {
     if (
       updateTrainingDto.groupId &&
       updateTrainingDto.groupId !== training.group.id &&
-      user.role !== UserRole.ADMIN &&
-      !user.groupIds?.includes(updateTrainingDto.groupId)
+      !this.permissionsService.checkGroupAccess(user, updateTrainingDto.groupId)
     ) {
       throw new ForbiddenException(
         'You can only move trainings to your own groups',

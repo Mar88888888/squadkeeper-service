@@ -76,7 +76,7 @@ export class AttendanceService {
         throw error;
       }
       this.logger.error('Failed to mark attendance', error);
-      throw new BadRequestException('Failed to mark attendance');
+      throw new BadRequestException(`Failed to mark attendance: ${error.message}`);
     }
   }
 

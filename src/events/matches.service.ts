@@ -93,6 +93,8 @@ export class MatchesService {
       where: dateFilter,
       relations: ['group'],
       order: { startTime: 'ASC' },
+      skip: filters.skip,
+      take: filters.take,
     });
   }
 
@@ -119,6 +121,8 @@ export class MatchesService {
       where: whereCondition,
       relations: ['group'],
       order: { startTime: 'ASC' },
+      skip: filters.skip,
+      take: filters.take,
     });
   }
 

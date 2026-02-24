@@ -105,7 +105,7 @@ export class ParentsService {
       });
     } catch (error) {
       this.logger.error('Failed to delete parent', error);
-      throw new BadRequestException('Failed to delete parent');
+      throw new BadRequestException(`Failed to delete parent: ${error.message}`);
     }
   }
 
@@ -197,7 +197,7 @@ export class ParentsService {
         throw error;
       }
       this.logger.error('Failed to create parent', error);
-      throw new BadRequestException('Failed to create parent');
+      throw new BadRequestException(`Failed to create parent: ${error.message}`);
     }
   }
 
@@ -245,7 +245,7 @@ export class ParentsService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update parent', error);
-      throw new BadRequestException('Failed to update parent');
+      throw new BadRequestException(`Failed to update parent: ${error.message}`);
     }
   }
 }

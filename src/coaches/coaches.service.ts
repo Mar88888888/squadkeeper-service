@@ -103,7 +103,7 @@ export class CoachesService {
       });
     } catch (error) {
       this.logger.error('Failed to delete coach', error);
-      throw new InternalServerErrorException('Failed to delete coach');
+      throw new InternalServerErrorException(`Failed to delete coach: ${error.message}`);
     }
   }
 
@@ -149,7 +149,7 @@ export class CoachesService {
         throw error;
       }
       this.logger.error('Failed to create coach', error);
-      throw new InternalServerErrorException('Failed to create coach');
+      throw new InternalServerErrorException(`Failed to create coach: ${error.message}`);
     }
   }
 
@@ -197,7 +197,7 @@ export class CoachesService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update coach', error);
-      throw new InternalServerErrorException('Failed to update coach');
+      throw new InternalServerErrorException(`Failed to update coach: ${error.message}`);
     }
   }
 }
