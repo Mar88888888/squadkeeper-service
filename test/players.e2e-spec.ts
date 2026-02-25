@@ -13,7 +13,6 @@ import { Player } from '../src/players/entities/player.entity';
 
 describe('Players (e2e)', () => {
   let app: INestApplication<App>;
-  let jwtService: JwtService;
 
   const mockPlayer = {
     id: 'player-123',
@@ -95,7 +94,7 @@ describe('Players (e2e)', () => {
     );
     await app.init();
 
-    jwtService = moduleFixture.get<JwtService>(JwtService);
+    moduleFixture.get<JwtService>(JwtService);
   });
 
   afterAll(async () => {
@@ -147,7 +146,7 @@ describe('Players (e2e)', () => {
     it('should create player for admin', async () => {
       mockPlayersService.create.mockResolvedValue(mockPlayer);
 
-      const response = await request(app.getHttpServer())
+      await request(app.getHttpServer())
         .post('/players')
         .set('Authorization', 'Bearer token-ADMIN')
         .send(createPlayerDto)

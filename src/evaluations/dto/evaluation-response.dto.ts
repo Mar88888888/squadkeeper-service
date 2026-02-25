@@ -9,6 +9,9 @@ class PlayerSummaryDto {
 
   @Expose()
   lastName: string;
+
+  @Expose()
+  position: string | null;
 }
 
 class CoachSummaryDto {

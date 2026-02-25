@@ -1,4 +1,4 @@
-import { Expose, Transform, Type } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 import { GameFormat } from '../entities/game-format.enum';
 import { Position } from '../../players/enums/position.enum';
 
