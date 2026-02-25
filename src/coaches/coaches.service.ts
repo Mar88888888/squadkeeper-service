@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { getErrorMessage } from '../common/utils/error.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import { Coach } from './entities/coach.entity';
@@ -135,7 +136,9 @@ export class CoachesService {
         throw error;
       }
       this.logger.error('Failed to create coach', error);
-      throw new InternalServerErrorException(`Failed to create coach: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to create coach: ${getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -156,7 +159,9 @@ export class CoachesService {
 
         if (coach.user) {
           if (email !== undefined && email !== coach.user.email) {
-            const existingUser = await manager.findOne(User, { where: { email } });
+            const existingUser = await manager.findOne(User, {
+              where: { email },
+            });
             if (existingUser) {
               throw new ConflictException('Email already exists');
             }
@@ -170,10 +175,14 @@ export class CoachesService {
 
         this.syncPersonNames(coach, coach.user, { firstName, lastName });
 
-        if (updateCoachDto.phoneNumber !== undefined) coach.phoneNumber = updateCoachDto.phoneNumber;
-        if (updateCoachDto.dateOfBirth !== undefined) coach.dateOfBirth = new Date(updateCoachDto.dateOfBirth);
-        if (updateCoachDto.licenseLevel !== undefined) coach.licenseLevel = updateCoachDto.licenseLevel;
-        if (updateCoachDto.experienceYears !== undefined) coach.experienceYears = updateCoachDto.experienceYears;
+        if (updateCoachDto.phoneNumber !== undefined)
+          coach.phoneNumber = updateCoachDto.phoneNumber;
+        if (updateCoachDto.dateOfBirth !== undefined)
+          coach.dateOfBirth = new Date(updateCoachDto.dateOfBirth);
+        if (updateCoachDto.licenseLevel !== undefined)
+          coach.licenseLevel = updateCoachDto.licenseLevel;
+        if (updateCoachDto.experienceYears !== undefined)
+          coach.experienceYears = updateCoachDto.experienceYears;
 
         await manager.save([coach.user, coach]);
 
@@ -183,7 +192,9 @@ export class CoachesService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update coach', error);
-      throw new InternalServerErrorException(`Failed to update coach: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to update coach: ${getErrorMessage(error)}`,
+      );
     }
   }
 }

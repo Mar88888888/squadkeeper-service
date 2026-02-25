@@ -40,7 +40,9 @@ export class SquadsService {
   ): Promise<Squad> {
     const group = await this.groupsService.findOne(createSquadDto.groupId);
 
-    if (!this.permissionsService.checkGroupAccess(user, createSquadDto.groupId)) {
+    if (
+      !this.permissionsService.checkGroupAccess(user, createSquadDto.groupId)
+    ) {
       throw new ForbiddenException('You do not have access to this group');
     }
 

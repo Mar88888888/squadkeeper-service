@@ -43,7 +43,9 @@ export class TrainingsController {
     @Body() createTrainingDto: CreateTrainingDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!this.permissionsService.checkGroupAccess(user, createTrainingDto.groupId)) {
+    if (
+      !this.permissionsService.checkGroupAccess(user, createTrainingDto.groupId)
+    ) {
       throw new ForbiddenException(
         'You can only create trainings for your own groups',
       );

@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsInt, IsBoolean, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsInt,
+  IsBoolean,
+  Min,
+  Max,
+} from 'class-validator';
 
 export class AddGoalDto {
   @IsString()

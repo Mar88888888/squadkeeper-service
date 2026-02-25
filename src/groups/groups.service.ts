@@ -4,6 +4,7 @@ import {
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { getErrorMessage } from '../common/utils/error.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In, DataSource } from 'typeorm';
 import { Group } from './entities/group.entity';
@@ -153,7 +154,9 @@ export class GroupsService {
     } catch (error) {
       if (error instanceof NotFoundException) throw error;
       this.logger.error(`Failed to delete group ${id}`, error);
-      throw new InternalServerErrorException(`Failed to delete group: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to delete group: ${getErrorMessage(error)}`,
+      );
     }
   }
 }

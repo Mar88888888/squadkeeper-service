@@ -60,7 +60,9 @@ export class MatchesService {
     match.awayGoals = updateMatchResultDto.awayGoals;
 
     const saved = await this.matchesRepository.save(match);
-    this.logger.log(`Match result updated: ${id} (${saved.homeGoals}-${saved.awayGoals})`);
+    this.logger.log(
+      `Match result updated: ${id} (${saved.homeGoals}-${saved.awayGoals})`,
+    );
     return saved;
   }
 

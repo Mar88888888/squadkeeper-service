@@ -6,6 +6,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { getErrorMessage } from '../common/utils/error.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import { Parent } from './entities/parent.entity';
@@ -175,7 +176,9 @@ export class ParentsService {
         throw error;
       }
       this.logger.error('Failed to create parent', error);
-      throw new InternalServerErrorException(`Failed to create parent: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to create parent: ${getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -223,7 +226,9 @@ export class ParentsService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update parent', error);
-      throw new InternalServerErrorException(`Failed to update parent: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to update parent: ${getErrorMessage(error)}`,
+      );
     }
   }
 }

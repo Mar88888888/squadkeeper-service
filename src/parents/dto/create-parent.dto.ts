@@ -12,8 +12,17 @@ export class CreateParentDto {
   email: string;
 
   @IsStrongPassword(
-    { minLength: 8, minLowercase: 1, minUppercase: 1, minNumbers: 1, minSymbols: 0 },
-    { message: 'Password must be at least 8 characters with uppercase, lowercase, and number' },
+    {
+      minLength: 8,
+      minLowercase: 1,
+      minUppercase: 1,
+      minNumbers: 1,
+      minSymbols: 0,
+    },
+    {
+      message:
+        'Password must be at least 8 characters with uppercase, lowercase, and number',
+    },
   )
   password: string;
 

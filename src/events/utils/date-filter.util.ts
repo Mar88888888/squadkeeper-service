@@ -1,4 +1,9 @@
-import { Between, FindOperator, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import {
+  Between,
+  FindOperator,
+  LessThanOrEqual,
+  MoreThanOrEqual,
+} from 'typeorm';
 import { TimeFilter } from '../enums/time-filter.enum';
 
 interface DateFilterOptions {
@@ -28,7 +33,9 @@ function endOfDay(date: Date): Date {
   return result;
 }
 
-export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | undefined {
+export function buildDateFilter(
+  filters: DateFilterOptions,
+): StartTimeFilter | undefined {
   const { timeFilter, dateFrom, dateTo } = filters;
 
   if (timeFilter && timeFilter !== TimeFilter.ALL) {
@@ -44,7 +51,9 @@ export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | u
       case TimeFilter.THIS_WEEK: {
         const startOfWeek = new Date(now);
         const dayOfWeek = now.getDay();
-        startOfWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+        startOfWeek.setDate(
+          now.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1),
+        );
         startOfWeek.setHours(0, 0, 0, 0);
         const endOfWeek = new Date(startOfWeek);
         endOfWeek.setDate(startOfWeek.getDate() + 6);
@@ -55,7 +64,9 @@ export function buildDateFilter(filters: DateFilterOptions): StartTimeFilter | u
       case TimeFilter.NEXT_WEEK: {
         const startOfNextWeek = new Date(now);
         const dayOfWeek = now.getDay();
-        startOfNextWeek.setDate(now.getDate() - dayOfWeek + (dayOfWeek === 0 ? 1 : 8));
+        startOfNextWeek.setDate(
+          now.getDate() - dayOfWeek + (dayOfWeek === 0 ? 1 : 8),
+        );
         startOfNextWeek.setHours(0, 0, 0, 0);
         const endOfNextWeek = new Date(startOfNextWeek);
         endOfNextWeek.setDate(startOfNextWeek.getDate() + 6);

@@ -24,10 +24,18 @@ import { DatabaseModule } from './database/database.module';
     }),
     TypeOrmModule.forRootAsync({
       useFactory: () => {
-        const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'];
+        const requiredEnvVars = [
+          'DB_HOST',
+          'DB_PORT',
+          'DB_USERNAME',
+          'DB_PASSWORD',
+          'DB_NAME',
+        ];
         const missing = requiredEnvVars.filter((v) => !process.env[v]);
         if (missing.length > 0) {
-          throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+          throw new Error(
+            `Missing required environment variables: ${missing.join(', ')}`,
+          );
         }
 
         return {

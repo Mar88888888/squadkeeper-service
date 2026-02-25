@@ -16,7 +16,9 @@ export class TrainingSchedule extends BaseEntity {
   @Column()
   location: string;
 
-  @ManyToOne(() => Group, (group) => group.trainingSchedules, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Group, (group) => group.trainingSchedules, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'groupId' })
   group: Group;
 }

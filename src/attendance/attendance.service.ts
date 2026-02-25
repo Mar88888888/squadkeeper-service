@@ -16,8 +16,12 @@ import { MarkAttendanceBatchDto } from './dto/mark-attendance-batch.dto';
 import { EventType } from '../events/enums/event-type.enum';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
 import { UserRole } from '../users/enums/user-role.enum';
-import { AuthenticatedUser, ChildInfo } from '../auth/dto/authenticated-user.dto';
+import {
+  AuthenticatedUser,
+  ChildInfo,
+} from '../auth/dto/authenticated-user.dto';
 import { calculateAttendanceRate } from './utils/attendance-rate.util';
+import { getErrorMessage } from '../common/utils/error.util';
 import { AttendanceStats } from './interfaces/attendance-stats.interface';
 
 export interface PlayerAttendanceStats extends AttendanceStats {
@@ -97,7 +101,9 @@ export class AttendanceService {
         throw error;
       }
       this.logger.error('Failed to mark attendance', error);
-      throw new BadRequestException(`Failed to mark attendance: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to mark attendance: ${getErrorMessage(error)}`,
+      );
     }
   }
 

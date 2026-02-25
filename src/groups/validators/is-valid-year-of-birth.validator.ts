@@ -12,9 +12,7 @@ export interface YearOfBirthOptions {
 }
 
 @ValidatorConstraint({ async: false })
-export class IsValidYearOfBirthConstraint
-  implements ValidatorConstraintInterface
-{
+export class IsValidYearOfBirthConstraint implements ValidatorConstraintInterface {
   validate(value: unknown, args: ValidationArguments): boolean {
     if (typeof value !== 'number') return false;
 

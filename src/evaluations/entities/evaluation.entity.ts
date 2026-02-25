@@ -23,7 +23,9 @@ export class Evaluation extends BaseEntity {
   @Column({ type: 'text', nullable: true })
   comment: string | null;
 
-  @ManyToOne(() => Player, (player) => player.evaluations, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Player, (player) => player.evaluations, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'playerId' })
   player: Player;
 

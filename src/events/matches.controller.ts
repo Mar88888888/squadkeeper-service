@@ -47,7 +47,9 @@ export class MatchesController {
     @Body() createMatchDto: CreateMatchDto,
     @CurrentUser() user: AuthenticatedUser,
   ) {
-    if (!this.permissionsService.checkGroupAccess(user, createMatchDto.groupId)) {
+    if (
+      !this.permissionsService.checkGroupAccess(user, createMatchDto.groupId)
+    ) {
       throw new ForbiddenException(
         'You can only create matches for your own groups',
       );

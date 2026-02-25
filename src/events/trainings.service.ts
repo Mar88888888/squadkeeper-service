@@ -91,18 +91,30 @@ export class TrainingsService {
     });
   }
 
-  async update(id: string, updateTrainingDto: UpdateTrainingDto): Promise<Training> {
+  async update(
+    id: string,
+    updateTrainingDto: UpdateTrainingDto,
+  ): Promise<Training> {
     const training = await this.findOne(id);
 
-    if (updateTrainingDto.groupId && updateTrainingDto.groupId !== training.group.id) {
-      training.group = await this.groupsService.findOne(updateTrainingDto.groupId);
+    if (
+      updateTrainingDto.groupId &&
+      updateTrainingDto.groupId !== training.group.id
+    ) {
+      training.group = await this.groupsService.findOne(
+        updateTrainingDto.groupId,
+      );
     }
 
     Object.assign(training, {
       startTime: updateTrainingDto.startTime ?? training.startTime,
-      durationMinutes: updateTrainingDto.durationMinutes ?? training.durationMinutes,
+      durationMinutes:
+        updateTrainingDto.durationMinutes ?? training.durationMinutes,
       location: updateTrainingDto.location ?? training.location,
-      topic: updateTrainingDto.topic !== undefined ? updateTrainingDto.topic : training.topic,
+      topic:
+        updateTrainingDto.topic !== undefined
+          ? updateTrainingDto.topic
+          : training.topic,
     });
 
     const saved = await this.trainingsRepository.save(training);

@@ -41,10 +41,14 @@ describe('Players (e2e)', () => {
         {
           provide: JwtService,
           useValue: {
-            sign: jest.fn().mockImplementation((payload) => `token-${payload.role}`),
+            sign: jest
+              .fn()
+              .mockImplementation((payload) => `token-${payload.role}`),
             verify: jest.fn().mockImplementation((token) => {
-              if (token.includes('ADMIN')) return { sub: 'admin-id', role: UserRole.ADMIN };
-              if (token.includes('PLAYER')) return { sub: 'player-id', role: UserRole.PLAYER };
+              if (token.includes('ADMIN'))
+                return { sub: 'admin-id', role: UserRole.ADMIN };
+              if (token.includes('PLAYER'))
+                return { sub: 'player-id', role: UserRole.PLAYER };
               throw new Error('Invalid token');
             }),
           },
@@ -86,7 +90,9 @@ describe('Players (e2e)', () => {
       .compile();
 
     app = moduleFixture.createNestApplication();
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true }),
+    );
     await app.init();
 
     jwtService = moduleFixture.get<JwtService>(JwtService);
@@ -147,11 +153,13 @@ describe('Players (e2e)', () => {
         .send(createPlayerDto)
         .expect(201);
 
-      expect(mockPlayersService.create).toHaveBeenCalledWith(expect.objectContaining({
-        email: 'newplayer@test.com',
-        firstName: 'New',
-        lastName: 'Player',
-      }));
+      expect(mockPlayersService.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          email: 'newplayer@test.com',
+          firstName: 'New',
+          lastName: 'Player',
+        }),
+      );
     });
 
     it('should validate required fields', async () => {

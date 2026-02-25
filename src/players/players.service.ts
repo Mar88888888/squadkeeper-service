@@ -5,6 +5,7 @@ import {
   NotFoundException,
   Logger,
 } from '@nestjs/common';
+import { getErrorMessage } from '../common/utils/error.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, In } from 'typeorm';
 import { Player } from './entities/player.entity';
@@ -198,7 +199,9 @@ export class PlayersService {
         throw error;
       }
       this.logger.error('Failed to create player', error);
-      throw new InternalServerErrorException(`Failed to create player: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to create player: ${getErrorMessage(error)}`,
+      );
     }
   }
 
@@ -256,7 +259,9 @@ export class PlayersService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update player', error);
-      throw new InternalServerErrorException(`Failed to update player: ${error.message}`);
+      throw new InternalServerErrorException(
+        `Failed to update player: ${getErrorMessage(error)}`,
+      );
     }
   }
 }

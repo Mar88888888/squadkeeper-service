@@ -31,12 +31,17 @@ export function getDateRangeForPeriod(period: StatsPeriod): DateRange {
       let seasonStartYear = now.getFullYear();
       if (
         now.getMonth() < SEASON_START_MONTH ||
-        (now.getMonth() === SEASON_START_MONTH && now.getDate() < SEASON_START_DAY)
+        (now.getMonth() === SEASON_START_MONTH &&
+          now.getDate() < SEASON_START_DAY)
       ) {
         seasonStartYear--;
       }
 
-      const start = new Date(seasonStartYear, SEASON_START_MONTH, SEASON_START_DAY);
+      const start = new Date(
+        seasonStartYear,
+        SEASON_START_MONTH,
+        SEASON_START_DAY,
+      );
       const end = new Date(
         seasonStartYear + 1,
         SEASON_START_MONTH,

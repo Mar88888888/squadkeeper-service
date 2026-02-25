@@ -7,11 +7,7 @@ import { CoachesModule } from '../coaches/coaches.module';
 import { PlayersModule } from '../players/players.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Group]),
-    CoachesModule,
-    PlayersModule,
-  ],
+  imports: [TypeOrmModule.forFeature([Group]), CoachesModule, PlayersModule],
   controllers: [GroupsController],
   providers: [GroupsService],
   exports: [GroupsService],

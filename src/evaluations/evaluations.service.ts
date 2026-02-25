@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Logger,
 } from '@nestjs/common';
+import { getErrorMessage } from '../common/utils/error.util';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOptionsWhere, In, IsNull, Repository } from 'typeorm';
 import { Evaluation } from './entities/evaluation.entity';
@@ -195,7 +196,7 @@ export class EvaluationsService {
       }
       this.logger.error('Failed to create evaluations', error);
       throw new BadRequestException(
-        `Failed to create evaluations: ${error.message}`,
+        `Failed to create evaluations: ${getErrorMessage(error)}`,
       );
     }
   }
