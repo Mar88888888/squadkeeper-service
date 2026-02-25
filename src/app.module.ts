@@ -22,18 +22,28 @@ import { DatabaseModule } from './database/database.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
-    TypeOrmModule.forRoot({
-      type: 'postgres',
-      host: process.env.DB_HOST,
-      port: parseInt(process.env.DB_PORT || '', 10),
-      username: process.env.DB_USERNAME || '',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_NAME || '',
-      autoLoadEntities: true,
-      synchronize: false,
-      migrationsRun: true,
-      migrations: ['dist/src/database/migrations/*.js'],
-      migrationsTableName: 'migrations',
+    TypeOrmModule.forRootAsync({
+      useFactory: () => {
+        const requiredEnvVars = ['DB_HOST', 'DB_PORT', 'DB_USERNAME', 'DB_PASSWORD', 'DB_NAME'];
+        const missing = requiredEnvVars.filter((v) => !process.env[v]);
+        if (missing.length > 0) {
+          throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
+        }
+
+        return {
+          type: 'postgres',
+          host: process.env.DB_HOST,
+          port: parseInt(process.env.DB_PORT!, 10),
+          username: process.env.DB_USERNAME,
+          password: process.env.DB_PASSWORD,
+          database: process.env.DB_NAME,
+          autoLoadEntities: true,
+          synchronize: false,
+          migrationsRun: true,
+          migrations: ['dist/src/database/migrations/*.js'],
+          migrationsTableName: 'migrations',
+        };
+      },
     }),
     UsersModule,
     ParentsModule,

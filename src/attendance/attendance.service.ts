@@ -16,7 +16,7 @@ import { MarkAttendanceBatchDto } from './dto/mark-attendance-batch.dto';
 import { EventType } from '../events/enums/event-type.enum';
 import { AttendanceRecordDto } from './dto/attendance-record.dto';
 import { UserRole } from '../users/enums/user-role.enum';
-import { ChildInfo } from '../auth/dto/authenticated-user.dto';
+import { AuthenticatedUser, ChildInfo } from '../auth/dto/authenticated-user.dto';
 import { calculateAttendanceRate } from './utils/attendance-rate.util';
 import { AttendanceStats } from './interfaces/attendance-stats.interface';
 
@@ -39,17 +39,35 @@ export class AttendanceService {
     private dataSource: DataSource,
   ) {}
 
-  async markBatch(dto: MarkAttendanceBatchDto): Promise<Attendance[]> {
+  async markBatch(
+    dto: MarkAttendanceBatchDto,
+    user: AuthenticatedUser,
+  ): Promise<Attendance[]> {
     try {
       return await this.dataSource.transaction(async (manager) => {
         const event =
           dto.eventType === EventType.TRAINING
-            ? await manager.findOne(Training, { where: { id: dto.eventId } })
-            : await manager.findOne(Match, { where: { id: dto.eventId } });
+            ? await manager.findOne(Training, {
+                where: { id: dto.eventId },
+                relations: ['group'],
+              })
+            : await manager.findOne(Match, {
+                where: { id: dto.eventId },
+                relations: ['group'],
+              });
 
         if (!event) {
           throw new NotFoundException(
             `${dto.eventType === EventType.TRAINING ? 'Training' : 'Match'} with ID ${dto.eventId} not found`,
+          );
+        }
+
+        if (
+          user.role !== UserRole.ADMIN &&
+          !user.groupIds?.includes(event.group.id)
+        ) {
+          throw new ForbiddenException(
+            'You can only mark attendance for your own groups',
           );
         }
 
@@ -72,7 +90,10 @@ export class AttendanceService {
         return results;
       });
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ForbiddenException
+      ) {
         throw error;
       }
       this.logger.error('Failed to mark attendance', error);

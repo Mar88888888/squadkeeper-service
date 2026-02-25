@@ -1,7 +1,7 @@
 import {
   Injectable,
   ConflictException,
-  BadRequestException,
+  InternalServerErrorException,
   NotFoundException,
   Logger,
 } from '@nestjs/common';
@@ -198,7 +198,7 @@ export class PlayersService {
         throw error;
       }
       this.logger.error('Failed to create player', error);
-      throw new BadRequestException(`Failed to create player: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to create player: ${error.message}`);
     }
   }
 
@@ -256,7 +256,7 @@ export class PlayersService {
       if (error instanceof NotFoundException) throw error;
       if (error instanceof ConflictException) throw error;
       this.logger.error('Failed to update player', error);
-      throw new BadRequestException(`Failed to update player: ${error.message}`);
+      throw new InternalServerErrorException(`Failed to update player: ${error.message}`);
     }
   }
 }

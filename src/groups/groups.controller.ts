@@ -75,6 +75,7 @@ export class GroupsController {
 
   @Post(':id/players')
   @Roles(UserRole.ADMIN)
+  @HttpCode(HttpStatus.OK)
   addPlayers(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() assignPlayersDto: AssignPlayersDto,

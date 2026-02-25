@@ -20,19 +20,21 @@ import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 
 @Controller('attendance')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post('batch')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.COACH)
   @HttpCode(HttpStatus.OK)
-  markBatch(@Body() dto: MarkAttendanceBatchDto) {
-    return this.attendanceService.markBatch(dto);
+  markBatch(
+    @Body() dto: MarkAttendanceBatchDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.attendanceService.markBatch(dto, user);
   }
 
   @Get('training/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   getTrainingAttendance(
     @Param('id', ParseUUIDPipe) id: string,
@@ -49,7 +51,6 @@ export class AttendanceController {
   }
 
   @Get('match/:id')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
   getMatchAttendance(
     @Param('id', ParseUUIDPipe) id: string,
@@ -66,14 +67,12 @@ export class AttendanceController {
   }
 
   @Get('my/stats')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.PLAYER)
   getMyStats(@CurrentUser() user: AuthenticatedUser) {
     return this.attendanceService.getPlayerStats([user.playerId!]);
   }
 
   @Get('my/children/stats')
-  @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(UserRole.PARENT)
   getChildrenStats(@CurrentUser() user: AuthenticatedUser) {
     const childIds = user.children?.map((c) => c.id) ?? [];

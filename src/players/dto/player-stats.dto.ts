@@ -21,7 +21,7 @@ export interface TeamStatsResponse {
   period: StatsPeriod;
 }
 
-export interface ChildInfo {
+export interface ChildStatsInfo {
   id: string;
   firstName: string;
   lastName: string;
@@ -30,5 +30,5 @@ export interface ChildInfo {
 }
 
 export interface ChildrenStatsResponse {
-  children: ChildInfo[];
+  children: ChildStatsInfo[];
 }

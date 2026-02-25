@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, In } from 'typeorm';
 import { Player } from './entities/player.entity';
@@ -9,7 +9,7 @@ import {
   PlayerStatsResponse,
   TeamStatsResponse,
   ChildrenStatsResponse,
-  ChildInfo,
+  ChildStatsInfo,
 } from './dto/player-stats.dto';
 import { AttendanceStats } from '../attendance/interfaces/attendance-stats.interface';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
@@ -42,7 +42,7 @@ export class PlayerStatsService {
     });
 
     if (!player) {
-      throw new Error(`Player with id ${playerId} not found`);
+      throw new NotFoundException(`Player with id ${playerId} not found`);
     }
 
     const dateRange = getDateRangeForPeriod(period);
@@ -119,7 +119,7 @@ export class PlayerStatsService {
 
     const statsMap = await this.getPlayerStatsBatch(players, period);
 
-    const children: ChildInfo[] = players.map((child) => ({
+    const children: ChildStatsInfo[] = players.map((child) => ({
       id: child.id,
       firstName: child.firstName,
       lastName: child.lastName,
