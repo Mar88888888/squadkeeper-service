@@ -17,6 +17,7 @@ import { TrainingsService } from './trainings.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
+import { TrainingResponseDto } from './dto/training-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -24,6 +25,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { PermissionsService } from '../auth/permissions.service';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('trainings')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -36,6 +38,7 @@ export class TrainingsController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(TrainingResponseDto)
   create(
     @Body() createTrainingDto: CreateTrainingDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -50,12 +53,14 @@ export class TrainingsController {
 
   @Get()
   @Roles(UserRole.ADMIN)
+  @Serialize(TrainingResponseDto)
   findAll(@Query() filters: FilterTrainingsDto) {
     return this.trainingsService.findAll(filters);
   }
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  @Serialize(TrainingResponseDto)
   findMyTrainings(
     @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterTrainingsDto,
@@ -69,6 +74,7 @@ export class TrainingsController {
 
   @Get('group/:groupId')
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(TrainingResponseDto)
   findByGroup(
     @Param('groupId', ParseUUIDPipe) groupId: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -83,6 +89,7 @@ export class TrainingsController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  @Serialize(TrainingResponseDto)
   async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -98,6 +105,7 @@ export class TrainingsController {
 
   @Patch(':id')
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(TrainingResponseDto)
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateTrainingDto: UpdateTrainingDto,

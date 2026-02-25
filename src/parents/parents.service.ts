@@ -76,37 +76,14 @@ export class ParentsService {
   }
 
   async remove(id: string): Promise<void> {
-    try {
-      await this.dataSource.transaction(async (manager) => {
-        const parent = await manager.findOne(Parent, {
-          where: { id },
-          relations: ['user', 'children'],
-          lock: { mode: 'pessimistic_write' },
-        });
+    const parent = await this.parentsRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
 
-        if (!parent) return;
+    if (!parent?.user) return;
 
-        if (parent.children && parent.children.length > 0) {
-          await manager
-            .createQueryBuilder()
-            .update(Player)
-            .set({ parent: null })
-            .where('parentId = :parentId', { parentId: id })
-            .execute();
-        }
-
-        const userId = parent.user?.id;
-
-        await manager.remove(parent);
-
-        if (userId) {
-          await manager.delete(User, userId);
-        }
-      });
-    } catch (error) {
-      this.logger.error('Failed to delete parent', error);
-      throw new BadRequestException(`Failed to delete parent: ${error.message}`);
-    }
+    await this.dataSource.manager.delete(User, parent.user.id);
   }
 
   async linkChild(parentId: string, playerId: string): Promise<Parent> {

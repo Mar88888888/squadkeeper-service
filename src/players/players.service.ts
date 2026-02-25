@@ -144,28 +144,14 @@ export class PlayersService {
   }
 
   async remove(id: string): Promise<void> {
-    try {
-      await this.dataSource.transaction(async (manager) => {
-        const player = await manager.findOne(Player, {
-          where: { id },
-          relations: ['user'],
-          lock: { mode: 'pessimistic_write' },
-        });
+    const player = await this.playersRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
 
-        if (!player) return;
+    if (!player?.user) return;
 
-        const userId = player.user?.id;
-
-        await manager.remove(player);
-
-        if (userId) {
-          await manager.delete(User, userId);
-        }
-      });
-    } catch (error) {
-      this.logger.error('Failed to delete player', error);
-      throw new BadRequestException(`Failed to delete player: ${error.message}`);
-    }
+    await this.dataSource.manager.delete(User, player.user.id);
   }
 
   async create(createPlayerDto: CreatePlayerDto): Promise<Player> {

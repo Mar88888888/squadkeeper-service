@@ -83,28 +83,14 @@ export class CoachesService {
   }
 
   async remove(id: string): Promise<void> {
-    try {
-      await this.dataSource.transaction(async (manager) => {
-        const coach = await manager.findOne(Coach, {
-          where: { id },
-          relations: ['user'],
-          lock: { mode: 'pessimistic_write' },
-        });
+    const coach = await this.coachesRepository.findOne({
+      where: { id },
+      relations: ['user'],
+    });
 
-        if (!coach) return;
+    if (!coach?.user) return;
 
-        const userId = coach.user?.id;
-
-        await manager.remove(coach);
-
-        if (userId) {
-          await manager.delete(User, userId);
-        }
-      });
-    } catch (error) {
-      this.logger.error('Failed to delete coach', error);
-      throw new InternalServerErrorException(`Failed to delete coach: ${error.message}`);
-    }
+    await this.dataSource.manager.delete(User, coach.user.id);
   }
 
   async create(createCoachDto: CreateCoachDto): Promise<Coach> {

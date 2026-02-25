@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { MatchType } from '../enums/match-type.enum';
+import { IsFutureDate } from '../validators/is-future-date.validator';
 
 export class CreateMatchDto {
   @IsUUID()
@@ -18,6 +19,7 @@ export class CreateMatchDto {
 
   @IsDate()
   @Type(() => Date)
+  @IsFutureDate({ message: 'Match cannot be scheduled in the past' })
   startTime: Date;
 
   @Type(() => Number)

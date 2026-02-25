@@ -11,6 +11,7 @@ import {
   Min,
   IsEnum,
 } from 'class-validator';
+import { IsDateOfBirth } from '../../common/validators/is-date-of-birth.validator';
 
 export enum LicenseLevel {
   NONE = 'none',
@@ -55,6 +56,7 @@ export class CreateCoachDto {
   phoneNumber?: string;
 
   @IsDateString()
+  @IsDateOfBirth({ minAge: 18, maxAge: 100 })
   dateOfBirth: string;
 
   @IsEnum(LicenseLevel, {

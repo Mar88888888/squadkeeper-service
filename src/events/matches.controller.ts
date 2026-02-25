@@ -19,6 +19,8 @@ import { CreateMatchDto } from './dto/create-match.dto';
 import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto } from './dto/filter-matches.dto';
 import { AddGoalDto } from './dto/add-goal.dto';
+import { MatchResponseDto } from './dto/match-response.dto';
+import { GoalResponseDto } from './dto/goal-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -26,6 +28,7 @@ import { UserRole } from '../users/enums/user-role.enum';
 import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/dto/authenticated-user.dto';
 import { PermissionsService } from '../auth/permissions.service';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('matches')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -39,6 +42,7 @@ export class MatchesController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(MatchResponseDto)
   create(
     @Body() createMatchDto: CreateMatchDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -53,12 +57,14 @@ export class MatchesController {
 
   @Get()
   @Roles(UserRole.ADMIN)
+  @Serialize(MatchResponseDto)
   findAll(@Query() filters: FilterMatchesDto) {
     return this.matchesService.findAll(filters);
   }
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  @Serialize(MatchResponseDto)
   findMyMatches(
     @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterMatchesDto,
@@ -68,12 +74,14 @@ export class MatchesController {
 
   @Get(':id')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  @Serialize(MatchResponseDto)
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.matchesService.findOne(id);
   }
 
   @Patch(':id/score')
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(MatchResponseDto)
   async updateResult(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() updateMatchResultDto: UpdateMatchResultDto,
@@ -110,6 +118,7 @@ export class MatchesController {
 
   @Get(':id/goals')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  @Serialize(GoalResponseDto)
   getGoals(@Param('id', ParseUUIDPipe) matchId: string) {
     return this.goalsService.getGoals(matchId);
   }
@@ -117,6 +126,7 @@ export class MatchesController {
   @Post(':id/goals')
   @HttpCode(HttpStatus.CREATED)
   @Roles(UserRole.COACH, UserRole.ADMIN)
+  @Serialize(GoalResponseDto)
   async addGoal(
     @Param('id', ParseUUIDPipe) matchId: string,
     @Body() addGoalDto: AddGoalDto,

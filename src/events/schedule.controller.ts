@@ -10,10 +10,12 @@ import {
 } from '@nestjs/common';
 import { ScheduleService } from './schedule.service';
 import { ApplyScheduleDto } from './dto/schedule.dto';
+import { TrainingScheduleResponseDto } from './dto/training-schedule-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { UserRole } from '../users/enums/user-role.enum';
+import { Serialize } from '../common/interceptors/serialize.interceptor';
 
 @Controller('groups/:groupId/schedule')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -22,6 +24,7 @@ export class ScheduleController {
 
   @Get()
   @Roles(UserRole.ADMIN, UserRole.COACH)
+  @Serialize(TrainingScheduleResponseDto)
   getSchedule(@Param('groupId', ParseUUIDPipe) groupId: string) {
     return this.scheduleService.getSchedule(groupId);
   }

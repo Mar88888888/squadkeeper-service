@@ -5,7 +5,7 @@ import { Player } from '../../players/entities/player.entity';
 
 @Entity('parents')
 export class Parent extends PersonEntity {
-  @OneToOne(() => User, (user) => user.parent)
+  @OneToOne(() => User, (user) => user.parent, { onDelete: 'CASCADE' })
   @JoinColumn()
   user: User;
 

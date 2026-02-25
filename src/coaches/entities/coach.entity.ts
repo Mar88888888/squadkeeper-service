@@ -20,7 +20,7 @@ export class Coach extends PersonEntity {
   @Column({ type: 'int' })
   experienceYears: number;
 
-  @OneToOne(() => User, (user) => user.coach)
+  @OneToOne(() => User, (user) => user.coach, { onDelete: 'CASCADE' })
   @JoinColumn()
   user: User;
 

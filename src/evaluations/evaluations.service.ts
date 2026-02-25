@@ -61,6 +61,7 @@ export class EvaluationsService {
         if (dto.trainingId) {
           training = await manager.findOne(Training, {
             where: { id: dto.trainingId },
+            relations: ['group', 'group.headCoach', 'group.assistants'],
           });
           if (!training) {
             throw new NotFoundException(
@@ -72,6 +73,7 @@ export class EvaluationsService {
         if (dto.matchId) {
           match = await manager.findOne(Match, {
             where: { id: dto.matchId },
+            relations: ['group', 'group.headCoach', 'group.assistants'],
           });
           if (!match) {
             throw new NotFoundException(
@@ -86,6 +88,15 @@ export class EvaluationsService {
         if (!coach) {
           throw new BadRequestException(
             'Only coaches can create evaluations. Admin users need a coach profile to evaluate players.',
+          );
+        }
+
+        const group = training?.group || match?.group;
+        const isHeadCoach = group?.headCoach?.id === coach.id;
+        const isAssistant = group?.assistants?.some((a) => a.id === coach.id);
+        if (!isHeadCoach && !isAssistant) {
+          throw new ForbiddenException(
+            'You can only create evaluations for groups you are assigned to',
           );
         }
 
@@ -108,9 +119,7 @@ export class EvaluationsService {
           where: attendanceWhere,
           relations: ['player'],
         });
-        const attendanceMap = new Map(
-          attendances.map((a) => [a.player.id, a]),
-        );
+        const attendanceMap = new Map(attendances.map((a) => [a.player.id, a]));
 
         // Batch fetch existing evaluations
         const existingEvaluations = await manager.find(Evaluation, {
@@ -185,14 +194,15 @@ export class EvaluationsService {
         throw error;
       }
       this.logger.error('Failed to create evaluations', error);
-      throw new BadRequestException(`Failed to create evaluations: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to create evaluations: ${error.message}`,
+      );
     }
   }
 
   async findByTraining(trainingId: string): Promise<Evaluation[]> {
     await this.trainingsService.findOne(trainingId);
-
-    return await this.evaluationsRepository.find({
+    return this.evaluationsRepository.find({
       where: { training: { id: trainingId } },
       relations: ['player', 'coach', 'training'],
       order: { createdAt: 'DESC' },
@@ -201,8 +211,7 @@ export class EvaluationsService {
 
   async findByMatch(matchId: string): Promise<Evaluation[]> {
     await this.matchesService.findOne(matchId);
-
-    return await this.evaluationsRepository.find({
+    return this.evaluationsRepository.find({
       where: { match: { id: matchId } },
       relations: ['player', 'coach', 'match'],
       order: { createdAt: 'DESC' },
@@ -217,7 +226,10 @@ export class EvaluationsService {
     });
   }
 
-  async getRatingStats(playerId: string, period: StatsPeriod = StatsPeriod.ALL_TIME) {
+  async getRatingStats(
+    playerId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ) {
     await this.playersService.findOne(playerId);
 
     const { start, end } = getDateRangeForPeriod(period);
@@ -438,7 +450,10 @@ export class EvaluationsService {
     return this.getRatingStats(playerId, period);
   }
 
-  async getMyRatingStats(userId: string, period: StatsPeriod = StatsPeriod.ALL_TIME) {
+  async getMyRatingStats(
+    userId: string,
+    period: StatsPeriod = StatsPeriod.ALL_TIME,
+  ) {
     const player = await this.playersService.findByUserId(userId);
     return this.getRatingStats(player.id, period);
   }

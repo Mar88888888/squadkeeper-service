@@ -29,11 +29,14 @@ export class Player extends PersonEntity {
   @Column({ type: 'enum', enum: StrongFoot, default: StrongFoot.RIGHT })
   strongFoot: StrongFoot;
 
-  @OneToOne(() => User, (user) => user.player)
+  @OneToOne(() => User, (user) => user.player, { onDelete: 'CASCADE' })
   @JoinColumn()
   user: User;
 
-  @ManyToOne(() => Parent, (parent) => parent.children, { nullable: true })
+  @ManyToOne(() => Parent, (parent) => parent.children, {
+    nullable: true,
+    onDelete: 'SET NULL',
+  })
   @JoinColumn({ name: 'parentId' })
   parent: Parent | null;
 
