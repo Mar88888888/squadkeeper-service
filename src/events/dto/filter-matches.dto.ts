@@ -5,11 +5,23 @@ import {
   IsInt,
   Min,
   Max,
+  IsUUID,
+  IsString,
+  MaxLength,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TimeFilter } from '../enums/time-filter.enum';
 
 export class FilterMatchesDto {
+  @IsOptional()
+  @IsUUID()
+  groupId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  search?: string;
+
   @IsOptional()
   @IsDateString()
   dateFrom?: string;

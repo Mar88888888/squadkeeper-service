@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, FindOptionsWhere, ILike } from 'typeorm';
 import { Training } from './entities/training.entity';
 import { GroupsService } from '../groups/groups.service';
 import { CreateTrainingDto } from './dto/create-training.dto';
@@ -8,16 +8,49 @@ import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { buildDateFilter } from './utils/date-filter.util';
+import { TimeFilter } from './enums/time-filter.enum';
 
 @Injectable()
 export class TrainingsService {
   private readonly logger = new Logger(TrainingsService.name);
+
+  private getSortDirection(filters: FilterTrainingsDto): 'ASC' | 'DESC' {
+    return filters.timeFilter === TimeFilter.PAST ? 'DESC' : 'ASC';
+  }
 
   constructor(
     @InjectRepository(Training)
     private trainingsRepository: Repository<Training>,
     private groupsService: GroupsService,
   ) {}
+
+  private buildWhere(
+    filters: FilterTrainingsDto,
+    groupIds?: string[],
+  ): FindOptionsWhere<Training> | FindOptionsWhere<Training>[] {
+    const dateFilter = buildDateFilter(filters);
+    const groupWhere =
+      filters.groupId
+        ? { id: filters.groupId }
+        : groupIds
+          ? { id: In(groupIds) }
+          : undefined;
+    const base: FindOptionsWhere<Training> = {
+      ...(dateFilter ?? {}),
+      ...(groupWhere ? { group: groupWhere } : {}),
+    };
+
+    if (!filters.search?.trim()) {
+      return base;
+    }
+
+    const search = `%${filters.search.trim()}%`;
+    return [
+      { ...base, topic: ILike(search) },
+      { ...base, location: ILike(search) },
+      { ...base, group: { ...(groupWhere ?? {}), name: ILike(search) } },
+    ];
+  }
 
   async create(createTrainingDto: CreateTrainingDto): Promise<Training> {
     const group = await this.groupsService.findOne(createTrainingDto.groupId);
@@ -32,16 +65,20 @@ export class TrainingsService {
     return saved;
   }
 
-  async findAll(filters: FilterTrainingsDto = {}): Promise<Training[]> {
-    const dateFilter = buildDateFilter(filters);
+  async findAll(
+    filters: FilterTrainingsDto = {},
+  ): Promise<{ items: Training[]; total: number }> {
+    const sortDirection = this.getSortDirection(filters);
+    const where = this.buildWhere(filters);
 
-    return this.trainingsRepository.find({
-      where: dateFilter,
+    const [items, total] = await this.trainingsRepository.findAndCount({
+      where,
       relations: ['group'],
-      order: { startTime: 'ASC' },
+      order: { startTime: sortDirection },
       skip: filters.skip,
       take: filters.take,
     });
+    return { items, total };
   }
 
   async findByGroup(groupId: string): Promise<Training[]> {
@@ -71,24 +108,22 @@ export class TrainingsService {
     groupIds: string[],
     role: UserRole,
     filters: FilterTrainingsDto = {},
-  ): Promise<Training[]> {
+  ): Promise<{ items: Training[]; total: number }> {
     if (role === UserRole.ADMIN) {
       return this.findAll(filters);
     }
-    if (groupIds.length === 0) return [];
+    if (groupIds.length === 0) return { items: [], total: 0 };
+    const sortDirection = this.getSortDirection(filters);
+    const where = this.buildWhere(filters, groupIds);
 
-    const dateFilter = buildDateFilter(filters);
-
-    return this.trainingsRepository.find({
-      where: {
-        group: { id: In(groupIds) },
-        ...dateFilter,
-      },
+    const [items, total] = await this.trainingsRepository.findAndCount({
+      where,
       relations: ['group'],
-      order: { startTime: 'ASC' },
+      order: { startTime: sortDirection },
       skip: filters.skip,
       take: filters.take,
     });
+    return { items, total };
   }
 
   async update(

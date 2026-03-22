@@ -18,6 +18,7 @@ import { CreateTrainingDto } from './dto/create-training.dto';
 import { UpdateTrainingDto } from './dto/update-training.dto';
 import { FilterTrainingsDto } from './dto/filter-trainings.dto';
 import { TrainingResponseDto } from './dto/training-response.dto';
+import { TrainingListResponseDto } from './dto/training-list-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -55,14 +56,14 @@ export class TrainingsController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  @Serialize(TrainingResponseDto)
+  @Serialize(TrainingListResponseDto)
   findAll(@Query() filters: FilterTrainingsDto) {
     return this.trainingsService.findAll(filters);
   }
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  @Serialize(TrainingResponseDto)
+  @Serialize(TrainingListResponseDto)
   findMyTrainings(
     @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterTrainingsDto,

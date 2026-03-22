@@ -5,7 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, FindOptionsWhere } from 'typeorm';
+import { Repository, In, FindOptionsWhere, ILike } from 'typeorm';
 import { Match } from './entities/match.entity';
 import { GroupsService } from '../groups/groups.service';
 import { CreateMatchDto } from './dto/create-match.dto';
@@ -14,16 +14,49 @@ import { FilterMatchesDto } from './dto/filter-matches.dto';
 import { UserRole } from '../users/enums/user-role.enum';
 import { MatchType } from './enums/match-type.enum';
 import { buildDateFilter } from './utils/date-filter.util';
+import { TimeFilter } from './enums/time-filter.enum';
 
 @Injectable()
 export class MatchesService {
   private readonly logger = new Logger(MatchesService.name);
+
+  private getSortDirection(filters: FilterMatchesDto): 'ASC' | 'DESC' {
+    return filters.timeFilter === TimeFilter.PAST ? 'DESC' : 'ASC';
+  }
 
   constructor(
     @InjectRepository(Match)
     private matchesRepository: Repository<Match>,
     private groupsService: GroupsService,
   ) {}
+
+  private buildWhere(
+    filters: FilterMatchesDto,
+    groupIds?: string[],
+  ): FindOptionsWhere<Match> | FindOptionsWhere<Match>[] {
+    const dateFilter = buildDateFilter(filters);
+    const groupWhere =
+      filters.groupId
+        ? { id: filters.groupId }
+        : groupIds
+          ? { id: In(groupIds) }
+          : undefined;
+    const base: FindOptionsWhere<Match> = {
+      ...(dateFilter ?? {}),
+      ...(groupWhere ? { group: groupWhere } : {}),
+    };
+
+    if (!filters.search?.trim()) {
+      return base;
+    }
+
+    const search = `%${filters.search.trim()}%`;
+    return [
+      { ...base, opponent: ILike(search) },
+      { ...base, location: ILike(search) },
+      { ...base, group: { ...(groupWhere ?? {}), name: ILike(search) } },
+    ];
+  }
 
   async create(createMatchDto: CreateMatchDto): Promise<Match> {
     const group = await this.groupsService.findOne(createMatchDto.groupId);
@@ -88,44 +121,46 @@ export class MatchesService {
     }
   }
 
-  async findAll(filters: FilterMatchesDto = {}): Promise<Match[]> {
-    const dateFilter = buildDateFilter(filters);
+  async findAll(
+    filters: FilterMatchesDto = {},
+  ): Promise<{ items: Match[]; total: number }> {
+    const sortDirection = this.getSortDirection(filters);
+    const where = this.buildWhere(filters);
 
-    return await this.matchesRepository.find({
-      where: dateFilter,
+    const [items, total] = await this.matchesRepository.findAndCount({
+      where,
       relations: ['group'],
-      order: { startTime: 'ASC' },
+      order: { startTime: sortDirection },
       skip: filters.skip,
       take: filters.take,
     });
+    return { items, total };
   }
 
   async findMyMatches(
     groupIds: string[],
     role: UserRole,
     filters: FilterMatchesDto = {},
-  ): Promise<Match[]> {
+  ): Promise<{ items: Match[]; total: number }> {
     if (role === UserRole.ADMIN) {
       return this.findAll(filters);
     }
 
     if (groupIds.length === 0) {
-      return [];
+      return { items: [], total: 0 };
     }
 
-    const dateFilter = buildDateFilter(filters);
-    const whereCondition: FindOptionsWhere<Match> = {
-      group: { id: In(groupIds) },
-      ...dateFilter,
-    };
+    const where = this.buildWhere(filters, groupIds);
+    const sortDirection = this.getSortDirection(filters);
 
-    return await this.matchesRepository.find({
-      where: whereCondition,
+    const [items, total] = await this.matchesRepository.findAndCount({
+      where,
       relations: ['group'],
-      order: { startTime: 'ASC' },
+      order: { startTime: sortDirection },
       skip: filters.skip,
       take: filters.take,
     });
+    return { items, total };
   }
 
   async findOne(id: string): Promise<Match> {
@@ -158,3 +193,4 @@ export class MatchesService {
     }
   }
 }
+

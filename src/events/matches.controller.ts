@@ -20,6 +20,7 @@ import { UpdateMatchResultDto } from './dto/update-match-result.dto';
 import { FilterMatchesDto } from './dto/filter-matches.dto';
 import { AddGoalDto } from './dto/add-goal.dto';
 import { MatchResponseDto } from './dto/match-response.dto';
+import { MatchListResponseDto } from './dto/match-list-response.dto';
 import { GoalResponseDto } from './dto/goal-response.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -59,14 +60,14 @@ export class MatchesController {
 
   @Get()
   @Roles(UserRole.ADMIN)
-  @Serialize(MatchResponseDto)
+  @Serialize(MatchListResponseDto)
   findAll(@Query() filters: FilterMatchesDto) {
     return this.matchesService.findAll(filters);
   }
 
   @Get('my')
   @Roles(UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  @Serialize(MatchResponseDto)
+  @Serialize(MatchListResponseDto)
   findMyMatches(
     @CurrentUser() user: AuthenticatedUser,
     @Query() filters: FilterMatchesDto,
