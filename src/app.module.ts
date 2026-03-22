@@ -46,10 +46,7 @@ import { DatabaseModule } from './database/database.module';
           password: process.env.DB_PASSWORD,
           database: process.env.DB_NAME,
           autoLoadEntities: true,
-          synchronize: false,
-          migrationsRun: true,
-          migrations: ['dist/src/database/migrations/*.js'],
-          migrationsTableName: 'migrations',
+          synchronize: true,
         };
       },
     }),
