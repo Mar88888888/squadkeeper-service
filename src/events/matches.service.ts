@@ -35,12 +35,11 @@ export class MatchesService {
     groupIds?: string[],
   ): FindOptionsWhere<Match> | FindOptionsWhere<Match>[] {
     const dateFilter = buildDateFilter(filters);
-    const groupWhere =
-      filters.groupId
-        ? { id: filters.groupId }
-        : groupIds
-          ? { id: In(groupIds) }
-          : undefined;
+    const groupWhere = filters.groupId
+      ? { id: filters.groupId }
+      : groupIds
+        ? { id: In(groupIds) }
+        : undefined;
     const base: FindOptionsWhere<Match> = {
       ...(dateFilter ?? {}),
       ...(groupWhere ? { group: groupWhere } : {}),
@@ -193,4 +192,3 @@ export class MatchesService {
     }
   }
 }
-

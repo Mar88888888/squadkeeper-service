@@ -9,4 +9,3 @@ export class TrainingListResponseDto {
   @Expose()
   total: number;
 }
-

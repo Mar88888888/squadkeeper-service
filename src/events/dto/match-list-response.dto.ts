@@ -9,4 +9,3 @@ export class MatchListResponseDto {
   @Expose()
   total: number;
 }
-

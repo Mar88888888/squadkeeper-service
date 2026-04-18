@@ -29,12 +29,11 @@ export class TrainingsService {
     groupIds?: string[],
   ): FindOptionsWhere<Training> | FindOptionsWhere<Training>[] {
     const dateFilter = buildDateFilter(filters);
-    const groupWhere =
-      filters.groupId
-        ? { id: filters.groupId }
-        : groupIds
-          ? { id: In(groupIds) }
-          : undefined;
+    const groupWhere = filters.groupId
+      ? { id: filters.groupId }
+      : groupIds
+        ? { id: In(groupIds) }
+        : undefined;
     const base: FindOptionsWhere<Training> = {
       ...(dateFilter ?? {}),
       ...(groupWhere ? { group: groupWhere } : {}),
