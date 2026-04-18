@@ -145,7 +145,11 @@ export class TeamOfMonthService {
     }
 
     const playerIds = players.map((player) => player.playerId);
-    const evaluationMap = await this.getEvaluationMetricsMap(playerIds, start, end);
+    const evaluationMap = await this.getEvaluationMetricsMap(
+      playerIds,
+      start,
+      end,
+    );
 
     const candidates: Candidate[] = players
       .map((player) => {
@@ -168,7 +172,9 @@ export class TeamOfMonthService {
         const assistsPerMatch =
           matchesPlayed > 0 ? this.round(player.assists / matchesPlayed) : 0;
         const cleanSheetsPerMatch =
-          matchesPlayed > 0 ? this.round(player.cleanSheets / matchesPlayed) : 0;
+          matchesPlayed > 0
+            ? this.round(player.cleanSheets / matchesPlayed)
+            : 0;
 
         return {
           playerId: player.playerId,
@@ -301,7 +307,9 @@ export class TeamOfMonthService {
       const technical = row.technical ? parseFloat(row.technical) : 0;
       const tactical = row.tactical ? parseFloat(row.tactical) : 0;
       const physical = row.physical ? parseFloat(row.physical) : 0;
-      const psychological = row.psychological ? parseFloat(row.psychological) : 0;
+      const psychological = row.psychological
+        ? parseFloat(row.psychological)
+        : 0;
       const categoryValues = [
         row.technical,
         row.tactical,
@@ -363,7 +371,9 @@ export class TeamOfMonthService {
     const metrics = Object.keys(weightsByMetric);
     const weights = metrics.map((metric) => weightsByMetric[metric]);
     const matrix = candidates.map((candidate) =>
-      metrics.map((metric) => candidate.metrics[metric as keyof CandidateMetrics]),
+      metrics.map(
+        (metric) => candidate.metrics[metric as keyof CandidateMetrics],
+      ),
     );
 
     const denominators = metrics.map((_, columnIndex) => {
@@ -412,18 +422,30 @@ export class TeamOfMonthService {
         if (b.score !== a.score) {
           return b.score - a.score;
         }
-        if (b.candidate.metrics.averageRating !== a.candidate.metrics.averageRating) {
-          return b.candidate.metrics.averageRating - a.candidate.metrics.averageRating;
+        if (
+          b.candidate.metrics.averageRating !==
+          a.candidate.metrics.averageRating
+        ) {
+          return (
+            b.candidate.metrics.averageRating -
+            a.candidate.metrics.averageRating
+          );
         }
-        return b.candidate.metrics.attendanceRate - a.candidate.metrics.attendanceRate;
+        return (
+          b.candidate.metrics.attendanceRate -
+          a.candidate.metrics.attendanceRate
+        );
       });
   }
 
   private resolveLine(position: Position): Line | null {
     if (position === Position.GK) return 'GK';
-    if ([Position.CB, Position.LB, Position.RB].includes(position)) return 'DEF';
-    if ([Position.CDM, Position.CM, Position.CAM].includes(position)) return 'MID';
-    if ([Position.LW, Position.RW, Position.ST].includes(position)) return 'FWD';
+    if ([Position.CB, Position.LB, Position.RB].includes(position))
+      return 'DEF';
+    if ([Position.CDM, Position.CM, Position.CAM].includes(position))
+      return 'MID';
+    if ([Position.LW, Position.RW, Position.ST].includes(position))
+      return 'FWD';
     return null;
   }
 

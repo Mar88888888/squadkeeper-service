@@ -71,9 +71,7 @@ export class PlayersController {
 
   @Get('stats/team-of-month')
   @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
-  getTeamOfMonth(
-    @Query('month') month?: string,
-  ): Promise<TeamOfMonthResponse> {
+  getTeamOfMonth(@Query('month') month?: string): Promise<TeamOfMonthResponse> {
     return this.teamOfMonthService.getSymbolicTeamOfMonth(month);
   }
 
