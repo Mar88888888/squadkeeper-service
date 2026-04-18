@@ -1,6 +1,6 @@
-# Football Academy Data Seeder
+# SquadKeeper Data Seeder
 
-This high-volume data seeder generates realistic test data for the Football Academy ranking system.
+This high-volume data seeder generates realistic test data for the SquadKeeper ranking system.
 
 ## Overview
 
