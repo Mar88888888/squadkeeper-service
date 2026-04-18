@@ -14,10 +14,12 @@ import {
 } from '@nestjs/common';
 import { PlayersService } from './players.service';
 import { PlayerStatsService } from './player-stats.service';
+import { TeamOfMonthService } from './team-of-month.service';
 import { CreatePlayerDto } from './dto/create-player.dto';
 import { UpdatePlayerDto } from './dto/update-player.dto';
 import { PlayerResponseDto } from './dto/player-response.dto';
 import { ChildrenStatsResponse } from './dto/player-stats.dto';
+import { TeamOfMonthResponse } from './dto/team-of-month.dto';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -33,6 +35,7 @@ export class PlayersController {
   constructor(
     private readonly playersService: PlayersService,
     private readonly playerStatsService: PlayerStatsService,
+    private readonly teamOfMonthService: TeamOfMonthService,
   ) {}
 
   @Get()
@@ -64,6 +67,14 @@ export class PlayersController {
       user.groupIds,
       period || StatsPeriod.ALL_TIME,
     );
+  }
+
+  @Get('stats/team-of-month')
+  @Roles(UserRole.ADMIN, UserRole.COACH, UserRole.PLAYER, UserRole.PARENT)
+  getTeamOfMonth(
+    @Query('month') month?: string,
+  ): Promise<TeamOfMonthResponse> {
+    return this.teamOfMonthService.getSymbolicTeamOfMonth(month);
   }
 
   @Get('stats/children')

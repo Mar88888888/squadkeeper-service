@@ -73,6 +73,15 @@ export class PlayerStatsService {
     groupIds: string[],
     period: StatsPeriod = StatsPeriod.ALL_TIME,
   ): Promise<TeamStatsResponse[]> {
+    const dateRange = getDateRangeForPeriod(period);
+    return this.getTeamStatsForDateRange(groupIds, dateRange, period);
+  }
+
+  async getTeamStatsForDateRange(
+    groupIds: string[],
+    dateRange: DateRange,
+    period: StatsPeriod,
+  ): Promise<TeamStatsResponse[]> {
     if (groupIds.length === 0) {
       return [];
     }
@@ -84,7 +93,11 @@ export class PlayerStatsService {
     });
 
     const allPlayers = groups.flatMap((g) => g.players);
-    const statsMap = await this.getPlayerStatsBatch(allPlayers, period);
+    const statsMap = await this.getPlayerStatsBatchForDateRange(
+      allPlayers,
+      dateRange,
+      period,
+    );
 
     return groups.map((group) => {
       const playerStats = group.players
@@ -430,12 +443,21 @@ export class PlayerStatsService {
   ): Promise<Map<string, PlayerStatsResponse>> {
     if (players.length === 0) return new Map();
 
+    const dateRange = getDateRangeForPeriod(period);
+    return this.getPlayerStatsBatchForDateRange(players, dateRange, period);
+  }
+
+  private async getPlayerStatsBatchForDateRange(
+    players: Player[],
+    dateRange: DateRange,
+    period: StatsPeriod,
+  ): Promise<Map<string, PlayerStatsResponse>> {
+    if (players.length === 0) return new Map();
+
     const playerIds = players.map((p) => p.id);
     const defensivePlayerIds = players
       .filter((p) => DEFENSIVE_POSITIONS.includes(p.position))
       .map((p) => p.id);
-
-    const dateRange = getDateRangeForPeriod(period);
 
     const [matchesPlayed, goals, assists, cleanSheets, attendance] =
       await Promise.all([
