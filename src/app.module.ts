@@ -15,6 +15,7 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { ContactsModule } from './contacts/contacts.module';
 import { SquadsModule } from './squads/squads.module';
 import { DatabaseModule } from './database/database.module';
+import { ObjectivesModule } from './objectives/objectives.module';
 
 @Module({
   imports: [
@@ -62,6 +63,7 @@ import { DatabaseModule } from './database/database.module';
     ContactsModule,
     SquadsModule,
     DatabaseModule,
+    ObjectivesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

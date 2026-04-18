@@ -8,6 +8,7 @@ import { MatchesService } from './matches.service';
 import { PlayersService } from '../players/players.service';
 import { AttendanceService } from '../attendance/attendance.service';
 import { AddGoalDto } from './dto/add-goal.dto';
+import { ObjectivesService } from '../objectives/objectives.service';
 
 @Injectable()
 export class GoalsService {
@@ -19,6 +20,7 @@ export class GoalsService {
     private matchesService: MatchesService,
     private playersService: PlayersService,
     private attendanceService: AttendanceService,
+    private objectivesService: ObjectivesService,
   ) {}
 
   private async validatePlayerPlayed(
@@ -124,6 +126,9 @@ export class GoalsService {
     });
 
     const savedGoal = await this.goalsRepository.save(goal);
+    await this.objectivesService.refreshForPlayers(
+      [scorer.id, assist?.id].filter((id): id is string => Boolean(id)),
+    );
     this.logger.log(
       `Goal added to match ${matchId}: scorer=${scorer.id}${assist ? `, assist=${assist.id}` : ''}${isOwnGoal ? ' (own goal)' : ''}`,
     );
@@ -133,10 +138,16 @@ export class GoalsService {
   async removeGoal(matchId: string, goalId: string): Promise<void> {
     const goal = await this.goalsRepository.findOne({
       where: { id: goalId, match: { id: matchId } },
+      relations: ['scorer', 'assist'],
     });
 
     if (goal) {
       await this.goalsRepository.remove(goal);
+      await this.objectivesService.refreshForPlayers(
+        [goal.scorer?.id, goal.assist?.id].filter((id): id is string =>
+          Boolean(id),
+        ),
+      );
       this.logger.log(`Goal ${goalId} removed from match ${matchId}`);
     }
   }

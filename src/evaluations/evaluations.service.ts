@@ -24,6 +24,7 @@ import { CreateEvaluationBatchDto } from './dto/create-evaluation-batch.dto';
 import { EventType } from '../events/enums/event-type.enum';
 import { StatsPeriod } from '../common/enums/stats-period.enum';
 import { getDateRangeForPeriod } from '../common/utils/date-range.util';
+import { ObjectivesService } from '../objectives/objectives.service';
 
 const DEFAULT_RATING = 5;
 
@@ -39,6 +40,7 @@ export class EvaluationsService {
     private trainingsService: TrainingsService,
     private matchesService: MatchesService,
     private dataSource: DataSource,
+    private objectivesService: ObjectivesService,
   ) {}
 
   async createBatch(
@@ -55,7 +57,7 @@ export class EvaluationsService {
     }
 
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      const result = await this.dataSource.transaction(async (manager) => {
         let training: Training | null = null;
         let match: Match | null = null;
 
@@ -187,6 +189,11 @@ export class EvaluationsService {
         // Batch save all evaluations
         return await manager.save(evaluationsToSave);
       });
+
+      await this.objectivesService.refreshForPlayers(
+        dto.records.map((record) => record.playerId),
+      );
+      return result;
     } catch (error) {
       if (
         error instanceof NotFoundException ||

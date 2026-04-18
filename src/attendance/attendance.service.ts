@@ -23,6 +23,7 @@ import {
 import { calculateAttendanceRate } from './utils/attendance-rate.util';
 import { getErrorMessage } from '../common/utils/error.util';
 import { AttendanceStats } from './interfaces/attendance-stats.interface';
+import { ObjectivesService } from '../objectives/objectives.service';
 
 export interface PlayerAttendanceStats extends AttendanceStats {
   playerId: string;
@@ -41,6 +42,7 @@ export class AttendanceService {
     @InjectRepository(Match)
     private matchesRepository: Repository<Match>,
     private dataSource: DataSource,
+    private objectivesService: ObjectivesService,
   ) {}
 
   async markBatch(
@@ -48,7 +50,7 @@ export class AttendanceService {
     user: AuthenticatedUser,
   ): Promise<Attendance[]> {
     try {
-      return await this.dataSource.transaction(async (manager) => {
+      const result = await this.dataSource.transaction(async (manager) => {
         const event =
           dto.eventType === EventType.TRAINING
             ? await manager.findOne(Training, {
@@ -93,6 +95,10 @@ export class AttendanceService {
 
         return results;
       });
+
+      const playerIds = dto.records.map((record) => record.playerId);
+      await this.objectivesService.refreshForPlayers(playerIds);
+      return result;
     } catch (error) {
       if (
         error instanceof NotFoundException ||

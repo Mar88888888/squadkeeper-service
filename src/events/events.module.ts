@@ -15,6 +15,7 @@ import { AuthModule } from '../auth/auth.module';
 import { GroupsModule } from '../groups/groups.module';
 import { PlayersModule } from '../players/players.module';
 import { AttendanceModule } from '../attendance/attendance.module';
+import { ObjectivesModule } from '../objectives/objectives.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { AttendanceModule } from '../attendance/attendance.module';
     GroupsModule,
     PlayersModule,
     AttendanceModule,
+    ObjectivesModule,
   ],
   controllers: [TrainingsController, MatchesController, ScheduleController],
   providers: [TrainingsService, MatchesService, GoalsService, ScheduleService],

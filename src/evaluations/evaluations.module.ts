@@ -6,6 +6,7 @@ import { EvaluationsController } from './evaluations.controller';
 import { PlayersModule } from '../players/players.module';
 import { ParentsModule } from '../parents/parents.module';
 import { EventsModule } from '../events/events.module';
+import { ObjectivesModule } from '../objectives/objectives.module';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { EventsModule } from '../events/events.module';
     PlayersModule,
     ParentsModule,
     EventsModule,
+    ObjectivesModule,
   ],
   controllers: [EvaluationsController],
   providers: [EvaluationsService],
