@@ -98,9 +98,15 @@ export class DataSeedService {
 
     console.log('\n📋 Test Account Summary:');
     console.log('  Password for all accounts: Test1234');
-    console.log(`  Coaches: coach1@test.com, coach2@test.com, ... coach5@test.com`);
-    console.log(`  Players: player1@test.com, player2@test.com, ... player100@test.com`);
-    console.log(`  Parents: parent1@test.com, parent2@test.com, ... parent60@test.com`);
+    console.log(
+      `  Coaches: coach1@test.com, coach2@test.com, ... coach5@test.com`,
+    );
+    console.log(
+      `  Players: player1@test.com, player2@test.com, ... player100@test.com`,
+    );
+    console.log(
+      `  Parents: parent1@test.com, parent2@test.com, ... parent60@test.com`,
+    );
 
     console.log('🎉 Database seeding completed successfully!');
   }
@@ -109,14 +115,14 @@ export class DataSeedService {
     console.log('🧹 Cleaning existing data...');
     // Delete in correct order respecting foreign key constraints
     // Children first, then parents
-    
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
-    
+
     try {
       // Disable foreign key checks temporarily for faster deletion
       await queryRunner.query('SET session_replication_role = replica;');
-      
+
       // Truncate all tables
       await queryRunner.query('TRUNCATE TABLE "evaluations" CASCADE;');
       await queryRunner.query('TRUNCATE TABLE "attendances" CASCADE;');
@@ -130,7 +136,7 @@ export class DataSeedService {
       await queryRunner.query('TRUNCATE TABLE "parents" CASCADE;');
       await queryRunner.query('TRUNCATE TABLE "coaches" CASCADE;');
       await queryRunner.query('TRUNCATE TABLE "users" CASCADE;');
-      
+
       // Re-enable foreign key checks
       await queryRunner.query('SET session_replication_role = DEFAULT;');
     } finally {
@@ -250,7 +256,7 @@ export class DataSeedService {
       parentChildrenCount.set(parent.id, faker.number.int({ min: 1, max: 3 }));
     });
 
-    let totalPlayersToCreate = 100;
+    const totalPlayersToCreate = 100;
     let playersCreated = 0;
 
     // Assign children to parents
